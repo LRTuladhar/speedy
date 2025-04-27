@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speedy - Photo Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Speedy</h1>
+            <p>Fast and simple photo management</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="add-directory-form">
+                    <h3>Add Directory</h3>
+                    <form action="{{ url_for('add_directory') }}" method="post">
+                        <div class="form-group">
+                            <input type="text" name="directory" id="directory" placeholder="Enter directory path" required>
+                            <button type="submit" class="btn">Add</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="directory-list">
+                    <h3>Monitored Directories</h3>
+                    <ul id="monitored-dirs">
+                        {% for directory in directories %}
+                        <li>
+                            {{ directory }}
+                            <form action="{{ url_for('remove_directory') }}" method="post" class="inline-form">
+                                <input type="hidden" name="directory" value="{{ directory }}">
+                                <button type="submit" class="btn-remove"><i class="fas fa-times"></i></button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                
+                <div class="directory-tree">
+                    <h3>Directory Tree</h3>
+                    <ul id="directory-tree-view">
+                        {% for tree in directory_trees %}
+                        <li class="tree-item" data-path="{{ tree.path }}">
+                            <span class="tree-toggle"><i class="fas fa-folder"></i> {{ tree.name }}</span>
+                            <ul class="tree-children">
+                                {% for child in tree.children %}
+                                {% if child.type == 'directory' %}
+                                <li class="tree-item" data-path="{{ child.path }}">
+                                    <span class="tree-toggle"><i class="fas fa-folder"></i> {{ child.name }}</span>
+                                    <ul class="tree-children"></ul>
+                                </li>
+                                {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="content">
+                <div class="image-gallery" id="image-gallery">
+                    <div class="gallery-placeholder">
+                        <i class="fas fa-images"></i>
+                        <p>Select a directory to view images</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

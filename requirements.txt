@@ -1,0 +1,4 @@
+Flask==2.3.3
+Pillow==10.0.0
+Werkzeug==2.3.7
+Flask-WTF==1.1.1
