@@ -11,7 +11,6 @@
     <div class="app-container">
         <header>
             <h1>Speedy</h1>
-            <p>Fast and simple photo management</p>
         </header>
         
         <div class="main-content">
@@ -26,27 +25,20 @@
                     </form>
                 </div>
                 
-                <div class="directory-list">
-                    <h3>Monitored Directories</h3>
-                    <ul id="monitored-dirs">
-                        {% for directory in directories %}
-                        <li>
-                            {{ directory }}
-                            <form action="{{ url_for('remove_directory') }}" method="post" class="inline-form">
-                                <input type="hidden" name="directory" value="{{ directory }}">
-                                <button type="submit" class="btn-remove"><i class="fas fa-times"></i></button>
-                            </form>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </div>
+
                 
                 <div class="directory-tree">
                     <h3>Directory Tree</h3>
                     <ul id="directory-tree-view">
                         {% for tree in directory_trees %}
                         <li class="tree-item" data-path="{{ tree.path }}">
-                            <span class="tree-toggle"><i class="fas fa-folder"></i> {{ tree.name }}</span>
+                            <div class="tree-item-header">
+                                <span class="tree-toggle"><i class="fas fa-folder"></i> {{ tree.name }}</span>
+                                <form action="{{ url_for('remove_directory') }}" method="post" class="inline-form">
+                                    <input type="hidden" name="directory" value="{{ tree.path }}">
+                                    <button type="submit" class="btn-remove"><i class="fas fa-trash"></i></button>
+                                </form>
+                            </div>
                             <ul class="tree-children">
                                 {% for child in tree.children %}
                                 {% if child.type == 'directory' %}

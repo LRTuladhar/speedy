@@ -89,7 +89,7 @@ def index():
         if os.path.exists(directory):
             directory_trees.append(get_directory_structure(directory))
     
-    return render_template('index.html', directories=directories, directory_trees=directory_trees)
+    return render_template('index.html', directory_trees=directory_trees)
 
 @app.route('/add_directory', methods=['POST'])
 def add_directory():

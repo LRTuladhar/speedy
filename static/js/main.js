@@ -37,7 +37,8 @@ function handleTreeItemClick(event) {
     event.currentTarget.classList.add('selected');
     
     // Get the path of the clicked directory
-    const path = event.currentTarget.parentElement.getAttribute('data-path');
+    const treeItem = event.currentTarget.closest('.tree-item');
+    const path = treeItem.getAttribute('data-path');
     
     // Load images for this directory
     loadDirectoryImages(path);
@@ -88,15 +89,21 @@ function loadDirectoryContents(path, container) {
                         li.className = 'tree-item';
                         li.setAttribute('data-path', child.path);
                         
+                        // Create header div to contain toggle and delete button
+                        const headerDiv = document.createElement('div');
+                        headerDiv.className = 'tree-item-header';
+                        
                         const span = document.createElement('span');
                         span.className = 'tree-toggle';
                         span.innerHTML = `<i class="fas fa-folder"></i> ${child.name}`;
                         span.addEventListener('click', handleTreeItemClick);
                         
+                        headerDiv.appendChild(span);
+                        
                         const ul = document.createElement('ul');
                         ul.className = 'tree-children';
                         
-                        li.appendChild(span);
+                        li.appendChild(headerDiv);
                         li.appendChild(ul);
                         container.appendChild(li);
                     }
