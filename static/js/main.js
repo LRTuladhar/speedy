@@ -999,16 +999,16 @@ function handleImageViewerKeyboard(event) {
             console.log('Delete key pressed');
             // Trigger delete action for current image
             const deleteBtn = document.getElementById('delete-image-viewer');
-            if (deleteBtn && viewerImages[currentViewerIndex]) {
+            if (deleteBtn && currentImages[currentViewerIndex]) {
                 // Simulate a click on the delete button
-                const currentImage = viewerImages[currentViewerIndex];
+                const currentImage = currentImages[currentViewerIndex];
                 if (confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
                     const imagePath = currentImage.path;
-                    const nextIndex = currentViewerIndex < viewerImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
+                    const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
                     
                     deleteImage(imagePath, function() {
                         // If there are no more images, close the viewer
-                        if (viewerImages.length === 0) {
+                        if (currentImages.length === 0) {
                             closeImageViewer();
                             return;
                         }
@@ -1076,7 +1076,6 @@ function calculateGridDimensions() {
 // Image Viewer Functions
 let currentViewerIndex = -1;
 let isNavigating = false; // Flag to prevent multiple rapid navigation calls
-let viewerImages = [];
 let showImageInfo = false; // Flag to track if image info is visible
 
 function initImageViewer() {
@@ -1112,8 +1111,9 @@ function initImageViewer() {
         const currentImage = currentImages[currentViewerIndex];
         if (currentImage && confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
             const imagePath = currentImage.path;
-            // Store the next index before deletion
-            const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
+            
+            // Determine which image to show next
+            const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex : currentViewerIndex - 1;
             
             console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, next index will be ${nextIndex}`);
             
@@ -1127,6 +1127,7 @@ function initImageViewer() {
                 // Navigate to the next image (or previous if at the end)
                 if (nextIndex >= 0 && nextIndex < currentImages.length) {
                     console.log(`Navigating to next image at index ${nextIndex}`);
+                    // After deletion, indexes have shifted, so we need to recalculate
                     updateImageViewer(nextIndex);
                 } else {
                     // No images left in this direction, close the viewer
@@ -1156,9 +1157,6 @@ function openImageViewer(index) {
     const imageName = document.getElementById('viewer-image-name');
     const infoPanel = document.querySelector('.minimal-info');
     
-    // Set the current images for the viewer
-    viewerImages = currentImages;
-    
     // Validate index
     if (index < 0 || index >= imagesPerPage) {
         console.error(`Invalid page-relative image index: ${index}`);
@@ -1174,16 +1172,16 @@ function openImageViewer(index) {
         return;
     }
     
-    // Set the current viewer index to the absolute index
-    // This is crucial for correct deletion
-    currentViewerIndex = absoluteIndex;
-    
     // Get the image
     const image = currentImages[absoluteIndex];
     if (!image) {
         console.error(`Image at absolute index ${absoluteIndex} not found!`);
         return;
     }
+    
+    // Set the current viewer index to the absolute index
+    // This is crucial for correct navigation and deletion
+    currentViewerIndex = absoluteIndex;
     
     // Set the image source and name
     viewerImage.src = image.url;
@@ -1201,7 +1199,7 @@ function openImageViewer(index) {
     document.body.style.overflow = 'hidden';
     
     // Update navigation buttons
-    updateViewerNavigation(absoluteIndex, viewerImages.length);
+    updateViewerNavigation(absoluteIndex, currentImages.length);
     
     console.log(`Opened image viewer for image at index ${index} (absolute index: ${absoluteIndex})`);
 }
@@ -1240,22 +1238,22 @@ function toggleImageInfo() {
     console.log(`Info panel display: ${infoPanel.style.display}, showImageInfo: ${showImageInfo}`);
 }
 
-function updateImageViewer(absoluteIndex) {
-    if (!currentImages || absoluteIndex < 0 || absoluteIndex >= currentImages.length) {
-        console.error(`Invalid image index for viewer: ${absoluteIndex}`);
+function updateImageViewer(index) {
+    if (!currentImages || index < 0 || index >= currentImages.length) {
+        console.error(`Invalid image index for viewer: ${index}`);
         return;
     }
     
-    // Get the image from the full collection
-    const image = currentImages[absoluteIndex];
+    // Get the image from the collection
+    const image = currentImages[index];
     if (!image) {
-        console.error(`Image at index ${absoluteIndex} not found!`);
+        console.error(`Image at index ${index} not found!`);
         return;
     }
     
-    // IMPORTANT: Update the current viewer index to match the absolute index
-    // This fixes the issue with deleting the wrong image
-    currentViewerIndex = absoluteIndex;
+    // IMPORTANT: Update the current viewer index to match the index
+    // This fixes the issue with navigating to the wrong image
+    currentViewerIndex = index;
     
     // Update viewer elements
     const viewerImage = document.getElementById('viewer-image');
@@ -1271,9 +1269,9 @@ function updateImageViewer(absoluteIndex) {
     }
     
     // Update navigation buttons
-    updateViewerNavigation(absoluteIndex, currentImages.length);
+    updateViewerNavigation(index, currentImages.length);
     
-    console.log(`Updated image viewer to show image at absolute index ${absoluteIndex}, currentViewerIndex set to ${currentViewerIndex}`);
+    console.log(`Updated image viewer to show image at index ${index}, currentViewerIndex set to ${currentViewerIndex}`);
 }
 
 function navigateImage(direction) {
@@ -1282,10 +1280,6 @@ function navigateImage(direction) {
     // Set the navigating flag to prevent multiple rapid calls
     isNavigating = true;
     console.log(`NAVIGATION STARTED: ${direction}`);
-    
-    // Calculate the absolute index in the full image collection
-    const currentAbsoluteIndex = (currentPage - 1) * imagesPerPage + currentViewerIndex;
-    let newAbsoluteIndex = currentAbsoluteIndex;
     
     // Determine the total number of images
     const totalImages = currentImages.length;
@@ -1297,86 +1291,78 @@ function navigateImage(direction) {
     }, 200); // 200ms debounce
     
     // Log the current state for debugging
-    console.log(`Before navigation: currentPage=${currentPage}, currentViewerIndex=${currentViewerIndex}, absoluteIndex=${currentAbsoluteIndex}`);
+    console.log(`Before navigation: currentViewerIndex=${currentViewerIndex}`);
     console.log(`Current images array length: ${currentImages.length}`);
     
     // Log the current image and its neighbors
-    if (currentImages[currentAbsoluteIndex]) {
-        console.log(`Current image: [${currentAbsoluteIndex}] ${currentImages[currentAbsoluteIndex].name}`);
+    if (currentImages[currentViewerIndex]) {
+        console.log(`Current image: [${currentViewerIndex}] ${currentImages[currentViewerIndex].name}`);
     }
-    if (currentAbsoluteIndex > 0 && currentImages[currentAbsoluteIndex - 1]) {
-        console.log(`Previous image: [${currentAbsoluteIndex - 1}] ${currentImages[currentAbsoluteIndex - 1].name}`);
+    if (currentViewerIndex > 0 && currentImages[currentViewerIndex - 1]) {
+        console.log(`Previous image: [${currentViewerIndex - 1}] ${currentImages[currentViewerIndex - 1].name}`);
     }
-    if (currentAbsoluteIndex < totalImages - 1 && currentImages[currentAbsoluteIndex + 1]) {
-        console.log(`Next image: [${currentAbsoluteIndex + 1}] ${currentImages[currentAbsoluteIndex + 1].name}`);
+    if (currentViewerIndex < totalImages - 1 && currentImages[currentViewerIndex + 1]) {
+        console.log(`Next image: [${currentViewerIndex + 1}] ${currentImages[currentViewerIndex + 1].name}`);
     }
     
-    // Determine the new absolute index based on direction
+    // Store the current index
+    let newIndex = currentViewerIndex;
+    
+    // Determine the new index based on direction
     switch (direction) {
         case 'prev':
             // Always move exactly one image backward
-            if (currentAbsoluteIndex > 0) {
-                newAbsoluteIndex = currentAbsoluteIndex - 1;
+            if (currentViewerIndex > 0) {
+                newIndex = currentViewerIndex - 1;
             }
             break;
             
         case 'next':
             // Always move exactly one image forward
-            if (currentAbsoluteIndex < totalImages - 1) {
-                newAbsoluteIndex = currentAbsoluteIndex + 1;
+            if (currentViewerIndex < totalImages - 1) {
+                newIndex = currentViewerIndex + 1;
             }
             break;
             
         case 'first':
-            newAbsoluteIndex = 0;
+            newIndex = 0;
             break;
             
         case 'last':
-            newAbsoluteIndex = totalImages - 1;
+            newIndex = totalImages - 1;
             break;
     }
     
-    // Log the new absolute index for debugging
-    console.log(`Navigation direction: ${direction}, new absoluteIndex=${newAbsoluteIndex}`);
+    // Log the new index for debugging
+    console.log(`Navigation direction: ${direction}, new index=${newIndex}`);
     
-    if (newAbsoluteIndex !== currentAbsoluteIndex) {
-        // Calculate which page this image is on
-        const newPage = Math.floor(newAbsoluteIndex / imagesPerPage) + 1;
-        const newRelativeIndex = newAbsoluteIndex % imagesPerPage;
-        
-        console.log(`New page: ${newPage}, new relative index: ${newRelativeIndex}`);
-        
-        // Get the image from the full collection
-        const image = currentImages[newAbsoluteIndex];
+    if (newIndex !== currentViewerIndex) {
+        // Get the image from the collection
+        const image = currentImages[newIndex];
         if (!image) {
-            console.error(`Image at index ${newAbsoluteIndex} not found!`);
+            console.error(`Image at index ${newIndex} not found!`);
             return;
         }
         
-        // Update viewer elements
-        updateImageViewer(newAbsoluteIndex);
+        // Update viewer elements directly with the new index
+        updateImageViewer(newIndex);
         
-        // If we need to change page
+        // Calculate which page this image is on for the grid view
+        const newPage = Math.floor(newIndex / imagesPerPage) + 1;
+        const newRelativeIndex = newIndex % imagesPerPage;
+        
+        // If we need to change page in the grid view
         if (newPage !== currentPage) {
             changePage(newPage);
+            // After changing page, select the correct image in the grid
+            setTimeout(() => selectImage(newRelativeIndex), 100);
         } else {
             // Just update the selected image in the grid
             selectImage(newRelativeIndex);
         }
         
-        // Update the current viewer index to the relative position on the current page
-        currentViewerIndex = newRelativeIndex;
-        
-        // Get current visible images count for debugging
-        const gallery = document.getElementById('image-gallery');
-        const visibleImages = gallery ? gallery.querySelectorAll('.image-item').length : 0;
-        
-        console.log(`Navigated to image at absolute index ${newAbsoluteIndex} (page ${newPage}, relative index ${newRelativeIndex})`);
-        console.log(`Current page has ${visibleImages} images visible in the grid out of ${totalImages} total images`);
+        console.log(`Navigated to image at index ${newIndex}`);
     }
-    
-    // Note: The navigation flag reset has been moved to the beginning of the function
-    // to ensure it always gets reset, even if there's an error during navigation
 }
 
 // Helper function to render gallery for a specific page
@@ -1589,6 +1575,12 @@ function deleteImage(imagePath, callback) {
                 console.log(`Removing image from currentImages at index ${imageIndex}`);
                 currentImages.splice(imageIndex, 1);
                 
+                // If the deleted image was before the current viewer index, adjust the index
+                if (imageViewerOpen && imageIndex < currentViewerIndex) {
+                    currentViewerIndex--;
+                    console.log(`Adjusted currentViewerIndex to ${currentViewerIndex} after deletion`);
+                }
+                
                 // Update pagination if needed
                 if (currentImages.length === 0) {
                     // No images left
@@ -1609,9 +1601,6 @@ function deleteImage(imagePath, callback) {
                     updatePaginationControls(currentImages.length, newTotalPages);
                 }
             }
-            
-            // Since we're using the same array now, we don't need this separate logic
-            // viewerImages and currentImages are the same reference
             
             if (typeof callback === 'function') {
                 callback();
