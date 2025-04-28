@@ -11,7 +11,8 @@ let currentSortMethod = 'date-desc'; // Default sort: date created, newest first
 
 // Application settings
 let appSettings = {
-    trash_folder: ''
+    trash_folder: '',
+    favorites_folder: ''
 };
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -769,7 +770,40 @@ function handleKeyNavigation(event) {
         return;
     }
     
-    // Only process arrow keys for navigation
+    // Handle favorite and delete actions
+    if (event.key === 'f' || event.key === 'F') {
+        // Favorite the selected image
+        if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
+            const selectedImage = images[selectedImageIndex];
+            const absoluteIndex = parseInt(selectedImage.getAttribute('data-absolute-index'), 10);
+            if (!isNaN(absoluteIndex) && absoluteIndex >= 0 && absoluteIndex < currentImages.length) {
+                const image = currentImages[absoluteIndex];
+                console.log(`Favoriting image at index ${selectedImageIndex} (absolute index: ${absoluteIndex}): ${image.name}`);
+                favoriteImage(image.path);
+                event.preventDefault();
+            }
+        }
+        return;
+    }
+    
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+        // Delete the selected image
+        if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
+            const selectedImage = images[selectedImageIndex];
+            const absoluteIndex = parseInt(selectedImage.getAttribute('data-absolute-index'), 10);
+            if (!isNaN(absoluteIndex) && absoluteIndex >= 0 && absoluteIndex < currentImages.length) {
+                const image = currentImages[absoluteIndex];
+                if (confirm(`Are you sure you want to move "${image.name}" to trash?`)) {
+                    console.log(`Deleting image at index ${selectedImageIndex} (absolute index: ${absoluteIndex}): ${image.name}`);
+                    deleteImage(image.path);
+                    event.preventDefault();
+                }
+            }
+        }
+        return;
+    }
+    
+    // Only process navigation keys for grid navigation
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) {
         return;
     }
@@ -1086,18 +1120,20 @@ function initImageViewer() {
     const nextBtn = document.getElementById('next-image');
     const deleteBtn = document.getElementById('delete-image-viewer');
     const trashBtn = document.getElementById('trash-image-button');
+    const favoriteBtn = document.getElementById('favorite-image-button');
+    const favoriteViewerBtn = document.getElementById('favorite-image-viewer');
     
     // Close button event
     closeBtn.addEventListener('click', closeImageViewer);
     
     // Previous image button
     prevBtn.addEventListener('click', function() {
-        navigateImage(-1);
+        navigateImage('prev');
     });
     
     // Next image button
     nextBtn.addEventListener('click', function() {
-        navigateImage(1);
+        navigateImage('next');
     });
     
     // Function to handle image deletion
@@ -1113,7 +1149,7 @@ function initImageViewer() {
             const imagePath = currentImage.path;
             
             // Determine which image to show next
-            const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex : currentViewerIndex - 1;
+            const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
             
             console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, next index will be ${nextIndex}`);
             
@@ -1125,15 +1161,30 @@ function initImageViewer() {
                 }
                 
                 // Navigate to the next image (or previous if at the end)
-                if (nextIndex >= 0 && nextIndex < currentImages.length) {
-                    console.log(`Navigating to next image at index ${nextIndex}`);
-                    // After deletion, indexes have shifted, so we need to recalculate
+                if (nextIndex >= 0) {
                     updateImageViewer(nextIndex);
                 } else {
                     // No images left in this direction, close the viewer
                     closeImageViewer();
                 }
             });
+        }
+    };
+    
+    // Function to handle adding image to favorites
+    const handleImageFavorite = function() {
+        // Make sure we're using the correct index
+        if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+            console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot favorite image`);
+            return;
+        }
+        
+        const currentImage = currentImages[currentViewerIndex];
+        if (currentImage) {
+            const imagePath = currentImage.path;
+            console.log(`Adding image to favorites: ${currentImage.name}`);
+            
+            favoriteImage(imagePath);
         }
     };
     
@@ -1145,6 +1196,16 @@ function initImageViewer() {
     // New trash button at the bottom right of the image
     if (trashBtn) {
         trashBtn.addEventListener('click', handleImageDelete);
+    }
+    
+    // Favorite button in the info panel
+    if (favoriteViewerBtn) {
+        favoriteViewerBtn.addEventListener('click', handleImageFavorite);
+    }
+    
+    // Favorite button at the bottom right of the image
+    if (favoriteBtn) {
+        favoriteBtn.addEventListener('click', handleImageFavorite);
     }
     
     console.log('Image viewer initialized with keyboard navigation');
@@ -1377,72 +1438,86 @@ function renderGalleryForPage(page, selectedIndex = -1) {
     const startIndex = (page - 1) * imagesPerPage;
     const endIndex = Math.min(startIndex + imagesPerPage, currentImages.length);
     
-    // Get images for this page
+    // Get the images for this page
     const pageImages = currentImages.slice(startIndex, endIndex);
     
-    console.log(`Rendering page ${page} with images from index ${startIndex} to ${endIndex-1}`);
-    
-    // Debug: Log the actual images being rendered on this page
-    console.log('Images on current page:');
+    // Log the images on this page for debugging
+    console.log(`Rendering gallery for page ${page} (${startIndex}-${endIndex-1})`);
     pageImages.forEach((img, idx) => {
         console.log(`Page index ${idx}, absolute index ${startIndex + idx}: ${img.name}`);
     });
     
-    // Add images to gallery
+    // Render each image
     pageImages.forEach((image, idx) => {
+        const absoluteIndex = startIndex + idx;
         const div = document.createElement('div');
         div.className = 'image-item';
+        div.setAttribute('data-index', idx);
+        div.setAttribute('data-absolute-index', absoluteIndex);
+        
         if (idx === selectedIndex) {
             div.classList.add('selected');
         }
-        div.setAttribute('data-index', idx);
         
-        // Calculate the absolute index for this image
-        const absoluteIndex = startIndex + idx;
-        div.setAttribute('data-absolute-index', absoluteIndex);
-        
-        // Add debug info to the element
-        div.setAttribute('data-debug', `Page: ${page}, Rel: ${idx}, Abs: ${absoluteIndex}`);
-        
+        // Create image element
         const img = document.createElement('img');
         img.src = image.url;
         img.alt = image.name;
-        img.loading = 'lazy';
+        img.loading = 'lazy'; // Use lazy loading for better performance
         
-        // Add click handler for selection only
-        div.addEventListener('click', function(e) {
-            console.log(`Clicked image: ${image.name} at page index ${idx}, absolute index ${absoluteIndex}`);
-            selectImage(idx);
-            e.stopPropagation();
-        });
-        
-        // Add double-click handler to open the image viewer
-        div.addEventListener('dblclick', function(e) {
-            console.log(`Double-clicked image: ${image.name} at page index ${idx}, absolute index ${absoluteIndex}`);
+        // Add click event to open the image viewer
+        img.addEventListener('click', function() {
             openImageViewer(idx);
-            e.stopPropagation();
         });
         
+        // Create image info element
         const info = document.createElement('div');
         info.className = 'image-info';
-        info.textContent = image.name;
+        info.innerHTML = `
+            <div class="image-name">${image.name}</div>
+            <div class="image-date">${new Date(image.date * 1000).toLocaleDateString()}</div>
+        `;
         
-        // Add delete button
+        // Create action buttons container
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'image-action-buttons';
+        
+        // Create favorite button
+        const favoriteButton = document.createElement('button');
+        favoriteButton.className = 'image-favorite-button';
+        favoriteButton.title = 'Add to favorites';
+        favoriteButton.innerHTML = '<i class="fas fa-star"></i>';
+        
+        // Add click event to favorite button
+        favoriteButton.addEventListener('click', function(e) {
+            e.stopPropagation(); // Prevent opening the image viewer
+            e.preventDefault();
+            favoriteImage(image.path);
+        });
+        
+        // Create delete button
         const deleteButton = document.createElement('button');
-        deleteButton.className = 'delete-button';
-        deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteButton.className = 'image-delete-button';
         deleteButton.title = 'Move to trash';
+        deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+        
+        // Add click event to delete button
         deleteButton.addEventListener('click', function(e) {
-            e.stopPropagation();
+            e.stopPropagation(); // Prevent opening the image viewer
             e.preventDefault();
             if (confirm(`Are you sure you want to move "${image.name}" to trash?`)) {
                 deleteImage(image.path);
             }
         });
         
+        // Add buttons to action buttons container
+        actionButtons.appendChild(favoriteButton);
+        actionButtons.appendChild(deleteButton);
+        
+        // Add all elements to the image item
         div.appendChild(img);
         div.appendChild(info);
-        div.appendChild(deleteButton);
+        div.appendChild(actionButtons);
         gallery.appendChild(div);
     });
     
@@ -1475,6 +1550,11 @@ function loadSettings() {
             if (trashFolderInput) {
                 trashFolderInput.value = appSettings.trash_folder || '';
             }
+            
+            const favoritesFolderInput = document.getElementById('favorites-folder');
+            if (favoritesFolderInput) {
+                favoritesFolderInput.value = appSettings.favorites_folder || '';
+            }
         })
         .catch(error => {
             console.error('Error loading settings:', error);
@@ -1483,10 +1563,12 @@ function loadSettings() {
 
 function saveSettings() {
     const trashFolderInput = document.getElementById('trash-folder');
-    if (!trashFolderInput) return;
+    const favoritesFolderInput = document.getElementById('favorites-folder');
+    if (!trashFolderInput || !favoritesFolderInput) return;
     
     const settings = {
-        trash_folder: trashFolderInput.value.trim()
+        trash_folder: trashFolderInput.value.trim(),
+        favorites_folder: favoritesFolderInput.value.trim()
     };
     
     fetch('/settings', {
@@ -1613,5 +1695,37 @@ function deleteImage(imagePath, callback) {
     .catch(error => {
         console.error('Error deleting image:', error);
         alert('Error deleting image: ' + error.message);
+    });
+}
+
+// Favorite image function
+function favoriteImage(imagePath) {
+    if (!imagePath) {
+        console.error('No image path provided for favorite');
+        return;
+    }
+    
+    console.log(`Adding image to favorites: ${imagePath}`);
+    
+    fetch('/favorite-image', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ path: imagePath })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Image added to favorites successfully:', data.message);
+            alert('Image added to favorites!');
+        } else {
+            console.error('Error adding image to favorites:', data.error);
+            alert('Error adding image to favorites: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error adding image to favorites:', error);
+        alert('Error adding image to favorites: ' + error.message);
     });
 }

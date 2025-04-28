@@ -129,6 +129,10 @@
                     <label for="trash-folder">Trash Folder:</label>
                     <input type="text" id="trash-folder" placeholder="Path to trash folder">
                 </div>
+                <div class="form-group">
+                    <label for="favorites-folder">Favorites Folder:</label>
+                    <input type="text" id="favorites-folder" placeholder="Path to favorites folder">
+                </div>
                 <div class="form-actions">
                     <button id="save-settings" class="btn">Save Settings</button>
                 </div>
@@ -144,9 +148,14 @@
                 <button id="prev-image" class="nav-button"><i class="fas fa-chevron-left"></i></button>
                 <div class="image-container">
                     <img id="viewer-image" src="" alt="Image preview">
-                    <button id="trash-image-button" class="image-trash-button" title="Move to trash">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="image-action-buttons">
+                        <button id="favorite-image-button" class="image-favorite-button" title="Add to favorites">
+                            <i class="fas fa-star"></i>
+                        </button>
+                        <button id="trash-image-button" class="image-trash-button" title="Move to trash">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
                 <button id="next-image" class="nav-button"><i class="fas fa-chevron-right"></i></button>
             </div>
@@ -154,6 +163,9 @@
             <div class="minimal-info">
                 <span id="viewer-image-name">Image Name</span>
                 <div class="viewer-controls">
+                    <button id="favorite-image-viewer" class="btn-icon" title="Add to favorites">
+                        <i class="fas fa-star"></i>
+                    </button>
                     <button id="delete-image-viewer" class="btn-icon" title="Move to trash">
                         <i class="fas fa-trash"></i>
                     </button>

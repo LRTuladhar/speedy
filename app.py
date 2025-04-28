@@ -53,7 +53,8 @@ SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settin
 
 # Default settings
 DEFAULT_SETTINGS = {
-    'trash_folder': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trash')
+    'trash_folder': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trash'),
+    'favorites_folder': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'favorites')
 }
 
 def get_settings():
@@ -97,6 +98,18 @@ def ensure_trash_folder():
         return trash_folder
     except Exception as e:
         logger.error(f"Error creating trash folder: {e}")
+        return None
+
+def ensure_favorites_folder():
+    """Ensure the favorites folder exists"""
+    settings = get_settings()
+    favorites_folder = settings['favorites_folder']
+    
+    try:
+        os.makedirs(favorites_folder, exist_ok=True)
+        return favorites_folder
+    except Exception as e:
+        logger.error(f"Error creating favorites folder: {e}")
         return None
 
 def get_monitored_directories():
@@ -243,8 +256,9 @@ def update_app_settings():
         
         # Save updated settings
         if save_settings(current_settings):
-            # Ensure trash folder exists
+            # Ensure folders exist
             ensure_trash_folder()
+            ensure_favorites_folder()
             return jsonify({'success': True, 'settings': current_settings})
         else:
             return jsonify({'success': False, 'error': 'Failed to save settings'}), 500
@@ -456,6 +470,40 @@ def serve_image():
     if path and os.path.exists(path) and is_image(path):
         return send_file(path)
     return '', 404
+
+@app.route('/favorite-image', methods=['POST'])
+def favorite_image():
+    """Copy an image to the favorites folder"""
+    try:
+        image_path = request.json.get('path')
+        if not image_path or not os.path.exists(image_path):
+            return jsonify({'success': False, 'error': 'Image not found'}), 404
+        
+        # Get the favorites folder path
+        favorites_folder = ensure_favorites_folder()
+        if not favorites_folder:
+            return jsonify({'success': False, 'error': 'Failed to create favorites folder'}), 500
+        
+        # Create a destination path in the favorites folder
+        filename = os.path.basename(image_path)
+        # Add timestamp to avoid name conflicts
+        timestamp = int(time.time())
+        favorite_filename = f"{timestamp}_{filename}"
+        favorite_path = os.path.join(favorites_folder, favorite_filename)
+        
+        # Copy the file to favorites
+        import shutil
+        shutil.copy2(image_path, favorite_path)
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Image copied to favorites',
+            'original_path': image_path,
+            'favorite_path': favorite_path
+        })
+    except Exception as e:
+        logger.error(f"Error favoriting image: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def scan_directory_task(task_id, directory):
     """Background task to scan a directory and count files and images."""
