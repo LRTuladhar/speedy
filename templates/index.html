@@ -10,14 +10,14 @@
 <body>
     <div class="app-container">
         <header>
-            <h1>Speedy</h1>
+            <h1>Speedy Photo Manager</h1>
         </header>
         
         <div class="main-content">
             <div class="sidebar">
                 <div class="add-directory-form">
                     <h3>Add Directory</h3>
-                    <form action="{{ url_for('add_directory') }}" method="post">
+                    <form id="add-directory-form" action="{{ url_for('add_directory') }}" method="post">
                         <div class="form-group">
                             <input type="text" name="directory" id="directory" placeholder="Enter directory path" required>
                             <button type="submit" class="btn">Add</button>
@@ -95,6 +95,45 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+    
+    <!-- Progress Modal -->
+    <div id="progress-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Adding Directory</h2>
+            <div class="progress-container">
+                <div class="progress">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+                <p id="progress-status">Scanning directory...</p>
+                <p id="progress-details">Path: </p>
+                <div class="progress-stats">
+                    <p>Files found: <span id="file-count">0</span></p>
+                    <p>Elapsed time: <span id="elapsed-time">0s</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Image Viewer Modal -->
+    <div id="image-viewer-modal" class="modal image-viewer-modal">
+        <div class="image-viewer-content">
+            <span class="close">&times;</span>
+            <div class="image-navigation">
+                <button id="prev-image" class="nav-button"><i class="fas fa-chevron-left"></i></button>
+                <div class="image-container">
+                    <img id="viewer-image" src="" alt="Image preview">
+                </div>
+                <button id="next-image" class="nav-button"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <!-- Info panel with image name and counter -->
+            <div class="minimal-info">
+                <span id="viewer-image-name">Image Name</span>
+                <div id="image-counter">Image 0 of 0</div>
+            </div>
+            <!-- Debug info has been removed -->
         </div>
     </div>
     

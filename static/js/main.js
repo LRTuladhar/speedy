@@ -19,13 +19,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Add event listener for the add directory form
-    const addDirectoryForm = document.querySelector('form[action*="add_directory"]');
+    const addDirectoryForm = document.getElementById('add-directory-form');
     if (addDirectoryForm) {
         console.log('Add directory form found, attaching event listener');
         addDirectoryForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent the default form submission
+            
             const directoryInput = this.querySelector('input[name="directory"]');
-            if (directoryInput) {
-                console.log(`Attempting to add directory: ${directoryInput.value}`);
+            if (directoryInput && directoryInput.value) {
+                const directoryPath = directoryInput.value;
+                console.log(`Attempting to add directory: ${directoryPath}`);
+                
+                // Show the progress dialog
+                showProgressDialog(directoryPath);
+                
+                // Start the scan process
+                scanDirectory(directoryPath);
             }
         });
     } else {
@@ -34,6 +43,34 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize pagination controls
     initPaginationControls();
+    
+    // Initialize modal close buttons
+    document.querySelectorAll('.modal .close').forEach(closeBtn => {
+        closeBtn.addEventListener('click', function() {
+            // Find the parent modal
+            const modal = this.closest('.modal');
+            if (modal) {
+                if (modal.id === 'progress-modal') {
+                    hideProgressDialog();
+                } else if (modal.id === 'image-viewer-modal') {
+                    closeImageViewer();
+                }
+            }
+        });
+    });
+    
+    // Initialize keyboard navigation for image grid
+    initKeyboardNavigation();
+    
+    // Initialize image viewer
+    initImageViewer();
+    
+    // Handle window resize to recalculate grid dimensions
+    window.addEventListener('resize', function() {
+        // Reset grid columns so they'll be recalculated
+        gridColumns = 0;
+        calculateGridDimensions();
+    });
 });
 
 function initDirectoryTree() {
@@ -257,11 +294,29 @@ function loadDirectoryImages(path) {
     fetch(`/get_directory_images?directory=${encodeURIComponent(path)}`)
         .then(response => response.json())
         .then(images => {
-            // Store in cache
-            imageCache[path] = images;
-            console.log(`Cached images for ${path}`);
+            console.log(`Received ${images.length} images from server for ${path}`);
             
-            renderImages(images, gallery);
+            // Debug: Log all received images
+            console.log('Raw images from server:');
+            images.forEach((img, i) => {
+                console.log(`[${i}] ${img.name} (${img.path})`);
+            });
+            
+            // Add index property to each image for debugging
+            const processedImages = images.map((img, idx) => ({
+                ...img,
+                index: idx, // Add index for debugging
+                originalIndex: idx // Keep track of original position
+            }));
+            
+            // Store in cache - but we'll process them in renderImages
+            imageCache[path] = processedImages;
+            console.log(`Cached ${processedImages.length} images for ${path}`);
+            
+            // Log the image collection for debugging
+            logImageCollection();
+            
+            renderImages(processedImages, gallery);
         })
         .catch(error => {
             console.error('Error loading images:', error);
@@ -274,55 +329,62 @@ function renderImages(images, gallery) {
     // Sort images first
     const sortedImages = sortImages(images, currentSortMethod);
     
-    // Store sorted images for pagination
-    currentImages = sortedImages;
+    // CRITICAL FIX: Check for duplicate images that might cause the skipping issue
+    console.log('Checking for duplicate images...');
+    const imageMap = new Map();
+    const validImages = [];
     
-    if (sortedImages.length === 0) {
+    // First pass: build a map of all images by their path to detect duplicates
+    sortedImages.forEach((img, idx) => {
+        if (!imageMap.has(img.path)) {
+            imageMap.set(img.path, { image: img, indices: [idx] });
+            validImages.push(img);
+        } else {
+            // This is a duplicate image
+            imageMap.get(img.path).indices.push(idx);
+            console.log(`Duplicate image detected: ${img.name} at indices ${imageMap.get(img.path).indices.join(', ')}`);
+        }
+    });
+    
+    console.log(`Original images: ${sortedImages.length}, After removing duplicates: ${validImages.length}`);
+    
+    // Store the deduplicated images for pagination
+    currentImages = validImages;
+    
+    if (currentImages.length === 0) {
         gallery.innerHTML = '<div class="gallery-placeholder"><i class="fas fa-images"></i><p>No images found in this directory</p></div>';
         updatePaginationControls(0, 0);
+        // Reset selected image when no images
+        selectedImageIndex = -1;
         return;
     }
     
+    // Log the final processed images
+    console.log('Final processed image collection:');
+    currentImages.forEach((img, i) => {
+        console.log(`[${i}] ${img.name}`);
+    });
+    
     // Calculate pagination
-    totalPages = Math.ceil(sortedImages.length / imagesPerPage);
+    totalPages = Math.ceil(currentImages.length / imagesPerPage);
     if (currentPage > totalPages) {
         currentPage = 1;
     }
     
     // Update pagination controls
-    updatePaginationControls(sortedImages.length, totalPages);
+    updatePaginationControls(currentImages.length, totalPages);
     
-    // Get current page images
-    const startIndex = (currentPage - 1) * imagesPerPage;
-    const endIndex = Math.min(startIndex + imagesPerPage, sortedImages.length);
-    const currentPageImages = sortedImages.slice(startIndex, endIndex);
+    // Reset selected image when changing pages
+    // selectedImageIndex = -1;
     
-    // Clear gallery
-    gallery.innerHTML = '';
+    // Reset grid columns calculation when gallery content changes
+    gridColumns = 0;
     
-    // Add images to gallery
-    currentPageImages.forEach(image => {
-        const div = document.createElement('div');
-        div.className = 'image-item';
-        
-        const img = document.createElement('img');
-        img.src = image.url;
-        img.alt = image.name;
-        img.loading = 'lazy';
-        
-        // Add click handler to view full-size image
-        img.addEventListener('click', function() {
-            window.open(image.url, '_blank');
-        });
-        
-        const info = document.createElement('div');
-        info.className = 'image-info';
-        info.textContent = image.name;
-        
-        div.appendChild(img);
-        div.appendChild(info);
-        gallery.appendChild(div);
-    });
+    // Use our helper function to render the gallery for the current page
+    renderGalleryForPage(currentPage, selectedImageIndex);
+    
+    // After rendering, calculate grid dimensions
+    setTimeout(calculateGridDimensions, 100);
 }
 
 function initPaginationControls() {
@@ -412,4 +474,777 @@ function sortImages(images, sortMethod) {
             console.warn(`Unknown sort method: ${sortMethod}, defaulting to date-desc`);
             return sortedImages.sort((a, b) => b.created - a.created);
     }
+}
+
+// Debug function to log the image collection
+function logImageCollection() {
+    if (!currentImages || currentImages.length === 0) {
+        console.log('No images in current collection');
+        return;
+    }
+    
+    console.log(`Current image collection has ${currentImages.length} images:`);
+    currentImages.forEach((img, idx) => {
+        console.log(`[${idx}] ${img.name}`);
+    });
+}
+
+// Progress dialog functions
+let scanTaskId = null;
+let scanInterval = null;
+let scanStartTime = 0;
+
+function showProgressDialog(directoryPath) {
+    const modal = document.getElementById('progress-modal');
+    const progressBar = document.getElementById('progress-bar');
+    const progressStatus = document.getElementById('progress-status');
+    const progressDetails = document.getElementById('progress-details');
+    const fileCount = document.getElementById('file-count');
+    const elapsedTime = document.getElementById('elapsed-time');
+    
+    // Reset progress elements
+    progressBar.style.width = '0%';
+    progressStatus.textContent = 'Scanning directory...';
+    progressDetails.textContent = `Path: ${directoryPath}`;
+    fileCount.textContent = '0';
+    elapsedTime.textContent = '0s';
+    
+    // Show the modal
+    modal.style.display = 'block';
+    scanStartTime = Date.now();
+}
+
+function hideProgressDialog() {
+    const modal = document.getElementById('progress-modal');
+    modal.style.display = 'none';
+    
+    // Clear the polling interval if it exists
+    if (scanInterval) {
+        clearInterval(scanInterval);
+        scanInterval = null;
+    }
+}
+
+function updateProgressDialog(data) {
+    const progressBar = document.getElementById('progress-bar');
+    const progressStatus = document.getElementById('progress-status');
+    const progressDetails = document.getElementById('progress-details');
+    const fileCount = document.getElementById('file-count');
+    const elapsedTime = document.getElementById('elapsed-time');
+    
+    // Update progress bar
+    progressBar.style.width = `${data.progress}%`;
+    
+    // Update status text based on scan status
+    if (data.status === 'scanning') {
+        progressStatus.textContent = `Scanning directory... ${data.progress}%`;
+    } else if (data.status === 'complete') {
+        progressStatus.textContent = 'Scan complete!';
+    } else if (data.status === 'error') {
+        progressStatus.textContent = 'Error scanning directory';
+        progressDetails.textContent = data.error || 'Unknown error';
+    }
+    
+    // Update details
+    const relativePath = data.current_path.replace(data.directory, '');
+    progressDetails.textContent = relativePath ? `Scanning: ${relativePath}` : `Scanning: ${data.directory}`;
+    
+    // Update file count
+    fileCount.textContent = `${data.files_found} files (${data.images_found} images)`;
+    
+    // Update elapsed time
+    const elapsed = Math.round(data.elapsed_time);
+    elapsedTime.textContent = formatTime(elapsed);
+    
+    // If scan is complete, handle completion
+    if (data.status === 'complete') {
+        handleScanComplete(data);
+    }
+}
+
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${seconds}s`;
+    } else {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}m ${remainingSeconds}s`;
+    }
+}
+
+function scanDirectory(directoryPath) {
+    // Create form data
+    const formData = new FormData();
+    formData.append('directory', directoryPath);
+    
+    // Start the scan
+    fetch('/scan_directory', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'started') {
+            scanTaskId = data.task_id;
+            console.log(`Scan started with task ID: ${scanTaskId}`);
+            
+            // Poll for updates
+            scanInterval = setInterval(() => pollScanStatus(scanTaskId), 500);
+        } else {
+            console.error('Failed to start scan:', data);
+            updateProgressDialog({
+                status: 'error',
+                progress: 0,
+                error: data.message || 'Failed to start scan',
+                files_found: 0,
+                images_found: 0,
+                current_path: directoryPath,
+                elapsed_time: 0,
+                directory: directoryPath
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error starting scan:', error);
+        updateProgressDialog({
+            status: 'error',
+            progress: 0,
+            error: 'Network error: ' + error.message,
+            files_found: 0,
+            images_found: 0,
+            current_path: directoryPath,
+            elapsed_time: 0,
+            directory: directoryPath
+        });
+    });
+}
+
+function pollScanStatus(taskId) {
+    fetch(`/scan_status/${taskId}`)
+        .then(response => response.json())
+        .then(data => {
+            updateProgressDialog(data);
+            
+            // If scan is complete or errored, stop polling
+            if (data.status === 'complete' || data.status === 'error') {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+        })
+        .catch(error => {
+            console.error('Error polling scan status:', error);
+            // Don't stop polling on network errors, it might be temporary
+        });
+}
+
+function handleScanComplete(data) {
+    console.log('Scan completed:', data);
+    
+    // After 2 seconds, submit the form to actually add the directory
+    setTimeout(() => {
+        const form = document.getElementById('add-directory-form');
+        if (form) {
+            // Create a new form to submit directly to the server
+            const directSubmitForm = document.createElement('form');
+            directSubmitForm.method = 'POST';
+            directSubmitForm.action = form.action;
+            
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'directory';
+            input.value = data.directory;
+            
+            directSubmitForm.appendChild(input);
+            document.body.appendChild(directSubmitForm);
+            directSubmitForm.submit();
+        }
+    }, 2000);
+}
+
+// Image grid keyboard navigation
+let selectedImageIndex = -1;
+let gridColumns = 0;
+
+function initKeyboardNavigation() {
+    // Add event listener for keyboard navigation
+    document.addEventListener('keydown', handleKeyNavigation);
+    
+    // Add click handler to select images
+    document.addEventListener('click', function(event) {
+        const imageItem = event.target.closest('.image-item');
+        if (imageItem) {
+            selectImage(Array.from(document.querySelectorAll('.image-item')).indexOf(imageItem));
+        }
+    });
+}
+
+// Track if the image viewer is open
+let imageViewerOpen = false;
+
+function handleKeyNavigation(event) {
+    // If image viewer is open, handle its navigation
+    if (imageViewerOpen) {
+        handleImageViewerKeyboard(event);
+        return;
+    }
+    
+    const gallery = document.getElementById('image-gallery');
+    if (!gallery) return;
+    
+    const images = Array.from(gallery.querySelectorAll('.image-item'));
+    if (images.length === 0) return;
+    
+    // Handle Enter key to open the selected image in the viewer
+    if (event.key === 'Enter') {
+        if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
+            openImageViewer(selectedImageIndex);
+            event.preventDefault();
+        }
+        return;
+    }
+    
+    // Only process arrow keys for navigation
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) {
+        return;
+    }
+    
+    // Calculate grid dimensions if not already done
+    if (gridColumns === 0) {
+        calculateGridDimensions();
+    }
+    
+    // If no image is selected, select the first one
+    if (selectedImageIndex === -1 && images.length > 0) {
+        selectImage(0);
+        return;
+    }
+    
+    // Calculate the current absolute index
+    const currentAbsoluteIndex = (currentPage - 1) * imagesPerPage + selectedImageIndex;
+    
+    // Calculate new index based on arrow key
+    let newIndex = selectedImageIndex;
+    let newPage = currentPage;
+    let needPageChange = false;
+    
+    switch (event.key) {
+        case 'ArrowLeft':
+            if (selectedImageIndex % gridColumns > 0) {
+                // Move left within the current page
+                newIndex = selectedImageIndex - 1;
+            } else if (currentPage > 1) {
+                // Move to the last column of the previous page
+                newPage = currentPage - 1;
+                needPageChange = true;
+                // Set to the last column of the row
+                newIndex = Math.min(imagesPerPage - 1, (Math.floor(selectedImageIndex / gridColumns) + 1) * gridColumns - 1);
+            }
+            break;
+            
+        case 'ArrowRight':
+            if (selectedImageIndex % gridColumns < gridColumns - 1 && selectedImageIndex < images.length - 1) {
+                // Move right within the current page
+                newIndex = selectedImageIndex + 1;
+            } else if (currentPage < totalPages) {
+                // Move to the first column of the next page
+                newPage = currentPage + 1;
+                needPageChange = true;
+                // Set to the first column of the same row
+                newIndex = Math.floor(selectedImageIndex / gridColumns) * gridColumns;
+            }
+            break;
+            
+        case 'ArrowUp':
+            if (selectedImageIndex >= gridColumns) {
+                // Move up within the current page
+                newIndex = selectedImageIndex - gridColumns;
+            } else if (currentPage > 1) {
+                // Move to the bottom of the previous page
+                newPage = currentPage - 1;
+                needPageChange = true;
+                // Try to maintain the same column position
+                newIndex = Math.min(
+                    imagesPerPage - gridColumns + (selectedImageIndex % gridColumns),
+                    imagesPerPage - 1
+                );
+            }
+            break;
+            
+        case 'ArrowDown':
+            if (selectedImageIndex + gridColumns < images.length) {
+                // Move down within the current page
+                newIndex = selectedImageIndex + gridColumns;
+            } else if (currentPage < totalPages) {
+                // Move to the top of the next page
+                newPage = currentPage + 1;
+                needPageChange = true;
+                // Try to maintain the same column position
+                newIndex = selectedImageIndex % gridColumns;
+            }
+            break;
+            
+        case 'PageUp':
+            if (currentPage > 1) {
+                // Move to the previous page
+                newPage = currentPage - 1;
+                needPageChange = true;
+                // Try to maintain the same position
+                newIndex = Math.min(selectedImageIndex, imagesPerPage - 1);
+            }
+            break;
+            
+        case 'PageDown':
+            if (currentPage < totalPages) {
+                // Move to the next page
+                newPage = currentPage + 1;
+                needPageChange = true;
+                // Try to maintain the same position
+                newIndex = Math.min(selectedImageIndex, imagesPerPage - 1);
+            }
+            break;
+            
+        case 'Home':
+            if (currentPage > 1) {
+                // Move to the first page
+                newPage = 1;
+                needPageChange = true;
+                newIndex = 0;
+            } else {
+                // Move to the first image on the current page
+                newIndex = 0;
+            }
+            break;
+            
+        case 'End':
+            if (currentPage < totalPages) {
+                // Move to the last page
+                newPage = totalPages;
+                needPageChange = true;
+                // Select the last image on the last page
+                const imagesOnLastPage = currentImages.length % imagesPerPage || imagesPerPage;
+                newIndex = imagesOnLastPage - 1;
+            } else {
+                // Move to the last image on the current page
+                newIndex = images.length - 1;
+            }
+            break;
+    }
+    
+    // Handle page change if needed
+    if (needPageChange) {
+        // Change to the new page
+        changePage(newPage);
+        
+        // After the page is rendered, select the appropriate image
+        setTimeout(() => {
+            const newImages = Array.from(gallery.querySelectorAll('.image-item'));
+            if (newImages.length > 0) {
+                // Make sure the index is valid for the new page
+                newIndex = Math.min(newIndex, newImages.length - 1);
+                selectImage(newIndex);
+                
+                // Ensure the selected image is visible
+                if (newImages[newIndex]) {
+                    newImages[newIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }, 100);
+        
+        event.preventDefault();
+        return;
+    }
+    
+    // Select the new image if index changed (within the same page)
+    if (newIndex !== selectedImageIndex) {
+        selectImage(newIndex);
+        
+        // Ensure the selected image is visible
+        images[newIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        // Prevent default scrolling behavior
+        event.preventDefault();
+    }
+}
+
+function handleImageViewerKeyboard(event) {
+    // Handle keyboard navigation in the image viewer
+    switch (event.key) {
+        case 'Escape':
+            closeImageViewer();
+            event.preventDefault();
+            break;
+            
+        case 'ArrowLeft':
+            console.log('Left arrow key pressed');
+            if (!isNavigating) {
+                navigateImage('prev');
+            }
+            event.preventDefault();
+            break;
+            
+        case 'ArrowRight':
+            console.log('Right arrow key pressed');
+            if (!isNavigating) {
+                navigateImage('next');
+            }
+            event.preventDefault();
+            break;
+    }
+}
+
+function selectImage(index) {
+    const gallery = document.getElementById('image-gallery');
+    if (!gallery) return;
+    
+    const images = gallery.querySelectorAll('.image-item');
+    if (index < 0 || index >= images.length) return;
+    
+    // Remove selected class from all images
+    images.forEach(img => img.classList.remove('selected'));
+    
+    // Add selected class to the target image
+    images[index].classList.add('selected');
+    selectedImageIndex = index;
+    
+    console.log(`Selected image at index ${index}`);
+}
+
+function calculateGridDimensions() {
+    const gallery = document.getElementById('image-gallery');
+    if (!gallery || gallery.children.length === 0) return;
+    
+    // Get the first image item
+    const firstImage = gallery.querySelector('.image-item');
+    if (!firstImage) return;
+    
+    // Calculate how many images fit in a row
+    const imageWidth = firstImage.offsetWidth;
+    const galleryWidth = gallery.offsetWidth;
+    
+    gridColumns = Math.floor(galleryWidth / imageWidth);
+    if (gridColumns < 1) gridColumns = 1; // Ensure at least 1 column
+    
+    console.log(`Grid dimensions calculated: ${gridColumns} columns`);
+}
+
+// Image Viewer Functions
+let currentViewerIndex = -1;
+let isNavigating = false; // Flag to prevent multiple rapid navigation calls
+
+function initImageViewer() {
+    // Set up image viewer event listeners
+    const modal = document.getElementById('image-viewer-modal');
+    const closeBtn = modal.querySelector('.close');
+    const prevBtn = document.getElementById('prev-image');
+    const nextBtn = document.getElementById('next-image');
+    
+    // Close button events
+    closeBtn.addEventListener('click', closeImageViewer);
+    
+    // Navigation buttons with debounce to prevent double-clicking
+    prevBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log('Prev button clicked');
+        if (!isNavigating) {
+            navigateImage('prev');
+        }
+    });
+    
+    nextBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log('Next button clicked');
+        if (!isNavigating) {
+            navigateImage('next');
+        }
+    });
+    
+    // Click outside to close
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeImageViewer();
+        }
+    });
+    
+    // Add global keyboard event listener specifically for the viewer
+    document.addEventListener('keydown', function(e) {
+        if (imageViewerOpen) {
+            handleImageViewerKeyboard(e);
+        }
+    });
+    
+    console.log('Image viewer initialized with simplified UI and keyboard navigation and debounce protection');
+}
+
+// Navigation debug function has been removed
+
+// This function has been removed as we no longer need the image list panel
+// We're keeping the navigation debug functionality in updateNavigationDebug
+
+// This function has been removed as we no longer need the image list panel
+
+function updateImageViewer(absoluteIndex) {
+    if (!currentImages || absoluteIndex < 0 || absoluteIndex >= currentImages.length) return;
+    
+    // Get the image from the full collection
+    const image = currentImages[absoluteIndex];
+    if (!image) return;
+    
+    // Update viewer elements
+    const viewerImage = document.getElementById('viewer-image');
+    const viewerName = document.getElementById('viewer-image-name');
+    const imageCounter = document.getElementById('image-counter');
+    
+    viewerImage.src = image.url;
+    viewerName.textContent = image.name;
+    imageCounter.textContent = `Image ${absoluteIndex + 1} of ${currentImages.length}`;
+    
+    // Debug information has been removed
+    
+    console.log(`Updated image viewer to show image at absolute index ${absoluteIndex}`);
+}
+
+function openImageViewer(index) {
+    const gallery = document.getElementById('image-gallery');
+    if (!gallery) return;
+    
+    const images = Array.from(gallery.querySelectorAll('.image-item'));
+    if (index < 0 || index >= images.length) return;
+    
+    // Get the absolute index directly from the data attribute if available
+    let absoluteIndex;
+    const selectedImage = images[index];
+    if (selectedImage && selectedImage.hasAttribute('data-absolute-index')) {
+        absoluteIndex = parseInt(selectedImage.getAttribute('data-absolute-index'));
+        console.log(`Using data-absolute-index: ${absoluteIndex}`);
+    } else {
+        // Calculate the absolute index in the full image collection
+        absoluteIndex = (currentPage - 1) * imagesPerPage + index;
+        console.log(`Calculated absolute index: ${absoluteIndex}`);
+    }
+    
+    if (absoluteIndex >= currentImages.length) {
+        console.error(`Invalid absolute index: ${absoluteIndex}, max: ${currentImages.length-1}`);
+        return;
+    }
+    
+    // Set current image index (relative to current page)
+    currentViewerIndex = index;
+    
+    // Update the image viewer
+    updateImageViewer(absoluteIndex);
+    
+    // Show the modal
+    const modal = document.getElementById('image-viewer-modal');
+    modal.style.display = 'block';
+    imageViewerOpen = true;
+    
+    // Debug information has been removed
+    
+    // Debug information
+    console.log(`Opened image viewer for image at absolute index ${absoluteIndex} (page ${currentPage}, relative index ${index})`);
+    console.log(`Current page has ${images.length} images visible in the grid`);
+    
+    // Log all images for debugging
+    console.log('All images in current collection:');
+    currentImages.forEach((img, i) => {
+        console.log(`[${i}] ${img.name}`);
+    });
+}
+
+function closeImageViewer() {
+    const modal = document.getElementById('image-viewer-modal');
+    modal.style.display = 'none';
+    imageViewerOpen = false;
+    currentViewerIndex = -1;
+    
+    console.log('Closed image viewer');
+}
+
+function navigateImage(direction) {
+    if (!currentImages || currentImages.length === 0 || isNavigating) return;
+    
+    // Set the navigating flag to prevent multiple rapid calls
+    isNavigating = true;
+    console.log(`NAVIGATION STARTED: ${direction}`);
+    
+    // Calculate the absolute index in the full image collection
+    const currentAbsoluteIndex = (currentPage - 1) * imagesPerPage + currentViewerIndex;
+    let newAbsoluteIndex = currentAbsoluteIndex;
+    
+    // Determine the total number of images
+    const totalImages = currentImages.length;
+    
+    // Reset the navigating flag after a short delay (do this early to ensure it gets reset)
+    setTimeout(() => {
+        isNavigating = false;
+        console.log('NAVIGATION COMPLETED - Ready for next navigation');
+    }, 200); // 200ms debounce
+    
+    // Log the current state for debugging
+    console.log(`Before navigation: currentPage=${currentPage}, currentViewerIndex=${currentViewerIndex}, absoluteIndex=${currentAbsoluteIndex}`);
+    console.log(`Current images array length: ${currentImages.length}`);
+    
+    // Log the current image and its neighbors
+    if (currentImages[currentAbsoluteIndex]) {
+        console.log(`Current image: [${currentAbsoluteIndex}] ${currentImages[currentAbsoluteIndex].name}`);
+    }
+    if (currentAbsoluteIndex > 0 && currentImages[currentAbsoluteIndex - 1]) {
+        console.log(`Previous image: [${currentAbsoluteIndex - 1}] ${currentImages[currentAbsoluteIndex - 1].name}`);
+    }
+    if (currentAbsoluteIndex < totalImages - 1 && currentImages[currentAbsoluteIndex + 1]) {
+        console.log(`Next image: [${currentAbsoluteIndex + 1}] ${currentImages[currentAbsoluteIndex + 1].name}`);
+    }
+    
+    // Determine the new absolute index based on direction
+    switch (direction) {
+        case 'prev':
+            // Always move exactly one image backward
+            if (currentAbsoluteIndex > 0) {
+                newAbsoluteIndex = currentAbsoluteIndex - 1;
+            }
+            break;
+            
+        case 'next':
+            // Always move exactly one image forward
+            if (currentAbsoluteIndex < totalImages - 1) {
+                newAbsoluteIndex = currentAbsoluteIndex + 1;
+            }
+            break;
+            
+        case 'first':
+            newAbsoluteIndex = 0;
+            break;
+            
+        case 'last':
+            newAbsoluteIndex = totalImages - 1;
+            break;
+    }
+    
+    // Log the new absolute index for debugging
+    console.log(`Navigation direction: ${direction}, new absoluteIndex=${newAbsoluteIndex}`);
+    
+    if (newAbsoluteIndex !== currentAbsoluteIndex) {
+        // Calculate which page this image is on
+        const newPage = Math.floor(newAbsoluteIndex / imagesPerPage) + 1;
+        const newRelativeIndex = newAbsoluteIndex % imagesPerPage;
+        
+        console.log(`New page: ${newPage}, new relative index: ${newRelativeIndex}`);
+        
+        // Get the image from the full collection
+        const image = currentImages[newAbsoluteIndex];
+        if (!image) {
+            console.error(`Image at index ${newAbsoluteIndex} not found!`);
+            return;
+        }
+        
+        // Update viewer elements
+        updateImageViewer(newAbsoluteIndex);
+        
+        // If we need to change page
+        if (newPage !== currentPage) {
+            // Update the current page
+            currentPage = newPage;
+            
+            // Update pagination display
+            const totalPages = Math.ceil(totalImages / imagesPerPage);
+            updatePaginationControls(totalImages, totalPages);
+            
+            // Re-render the gallery with the new page
+            const imagesOnPage = renderGalleryForPage(newPage, newRelativeIndex);
+            console.log(`Changed to page ${newPage} with ${imagesOnPage} images`);
+        } else {
+            // Just update the selected image in the grid
+            selectImage(newRelativeIndex);
+        }
+        
+        // Update the current viewer index to the relative position on the current page
+        currentViewerIndex = newRelativeIndex;
+        
+        // Get current visible images count for debugging
+        const gallery = document.getElementById('image-gallery');
+        const visibleImages = gallery ? gallery.querySelectorAll('.image-item').length : 0;
+        
+        console.log(`Navigated to image at absolute index ${newAbsoluteIndex} (page ${newPage}, relative index ${newRelativeIndex})`);
+        console.log(`Current page has ${visibleImages} images visible in the grid out of ${totalImages} total images`);
+    }
+    
+    // Note: The navigation flag reset has been moved to the beginning of the function
+    // to ensure it always gets reset, even if there's an error during navigation
+}
+
+// Helper function to render gallery for a specific page
+function renderGalleryForPage(page, selectedIndex = -1) {
+    const gallery = document.getElementById('image-gallery');
+    if (!gallery || !currentImages || currentImages.length === 0) return;
+    
+    // Clear gallery first
+    gallery.innerHTML = '';
+    
+    // Calculate start and end indices for this page
+    const startIndex = (page - 1) * imagesPerPage;
+    const endIndex = Math.min(startIndex + imagesPerPage, currentImages.length);
+    
+    // Get images for this page
+    const pageImages = currentImages.slice(startIndex, endIndex);
+    
+    console.log(`Rendering page ${page} with images from index ${startIndex} to ${endIndex-1}`);
+    
+    // Debug: Log the actual images being rendered on this page
+    console.log('Images on current page:');
+    pageImages.forEach((img, idx) => {
+        console.log(`Page index ${idx}, absolute index ${startIndex + idx}: ${img.name}`);
+    });
+    
+    // Add images to gallery
+    pageImages.forEach((image, idx) => {
+        const div = document.createElement('div');
+        div.className = 'image-item';
+        if (idx === selectedIndex) {
+            div.classList.add('selected');
+        }
+        div.setAttribute('data-index', idx);
+        
+        // Calculate the absolute index for this image
+        const absoluteIndex = startIndex + idx;
+        div.setAttribute('data-absolute-index', absoluteIndex);
+        
+        // Add debug info to the element
+        div.setAttribute('data-debug', `Page: ${page}, Rel: ${idx}, Abs: ${absoluteIndex}`);
+        
+        const img = document.createElement('img');
+        img.src = image.url;
+        img.alt = image.name;
+        img.loading = 'lazy';
+        
+        // Add click handler
+        div.addEventListener('click', function(e) {
+            console.log(`Clicked image: ${image.name} at page index ${idx}, absolute index ${absoluteIndex}`);
+            selectImage(idx);
+            openImageViewer(idx);
+            e.stopPropagation();
+        });
+        
+        const info = document.createElement('div');
+        info.className = 'image-info';
+        info.textContent = image.name;
+        
+        div.appendChild(img);
+        div.appendChild(info);
+        gallery.appendChild(div);
+    });
+    
+    console.log(`Rendered gallery for page ${page} with ${pageImages.length} images`);
+    return pageImages.length; // Return the number of images rendered
+}
+
+function updateViewerNavigation(index, totalImages) {
+    const prevBtn = document.getElementById('prev-image');
+    const nextBtn = document.getElementById('next-image');
+    
+    prevBtn.disabled = index <= 0;
+    nextBtn.disabled = index >= totalImages - 1;
+    
+    // Update visual state
+    prevBtn.style.opacity = index <= 0 ? '0.5' : '1';
+    nextBtn.style.opacity = index >= totalImages - 1 ? '0.5' : '1';
 }

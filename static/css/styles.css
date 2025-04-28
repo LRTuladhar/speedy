@@ -184,15 +184,28 @@ input[type="text"] {
 }
 
 .image-item {
-    position: relative;
+    margin: 10px;
+    text-align: center;
+    width: 200px;
+    height: 220px;
     overflow: hidden;
-    border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s;
+    position: relative;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    cursor: pointer;
 }
 
 .image-item:hover {
-    transform: scale(1.03);
+    transform: scale(1.05);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.image-item.selected {
+    border: 3px solid #4285f4;
+    box-shadow: 0 0 10px rgba(66, 133, 244, 0.5);
+    transform: scale(1.05);
 }
 
 .image-item img {
@@ -296,4 +309,369 @@ input[type="text"] {
 .btn-pagination:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.4);
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    position: relative;
+    background-color: #fefefe;
+    margin: 10% auto;
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: 500px;
+    max-width: 90%;
+    animation: slideDown 0.3s;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-header {
+    padding: 15px 20px;
+    background-color: #3498db;
+    color: white;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.close {
+    color: white;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #f0f0f0;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.progress-info {
+    margin-bottom: 15px;
+}
+
+.progress-info p {
+    margin: 5px 0;
+    color: #333;
+}
+
+#progress-details {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.progress-bar-container {
+    width: 100%;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 20px;
+    background-color: #3498db;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 4px;
+}
+
+.progress-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.progress-stats p {
+    margin: 0;
+}
+
+/* Modal Base Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 50%;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1010;
+}
+
+.close:hover,
+.close:focus {
+    color: #000;
+    text-decoration: none;
+}
+
+/* Progress Modal Styles */
+.progress {
+    width: 100%;
+    background-color: #f3f3f3;
+    border-radius: 5px;
+    margin: 10px 0;
+    height: 20px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #4CAF50;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.progress-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    color: #666;
+}
+
+/* Image Viewer Modal Styles */
+.image-viewer-modal {
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+.image-viewer-content {
+    background-color: transparent;
+    margin: 2% auto;
+    padding: 0;
+    width: 95%;
+    max-width: 1600px;
+    border: none;
+    box-shadow: none;
+    color: white;
+    position: relative;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.image-viewer-modal .close {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    color: white;
+    font-size: 35px;
+    transition: color 0.2s;
+}
+
+.image-viewer-modal .close:hover {
+    color: #ff4081;
+}
+
+/* Removed viewer layout styles as we no longer need the split panel */
+
+.image-navigation {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+}
+
+.image-container {
+    flex-grow: 1;
+    text-align: center;
+    height: 85vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.minimal-info {
+    position: absolute;
+    bottom: 15px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 8px 0;
+    font-size: 16px;
+    opacity: 0.8;
+    transition: opacity 0.3s ease;
+}
+
+/* Removed image list panel styles as we no longer need them */
+
+.minimal-info:hover {
+    opacity: 1;
+}
+
+#viewer-image-name {
+    color: white;
+    font-weight: normal;
+    display: block;
+    margin-bottom: 5px;
+}
+
+#image-counter {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: inline-block;
+    margin-top: 2px;
+}
+
+#viewer-image {
+    max-height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.nav-button {
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    cursor: pointer;
+    margin: 0 15px;
+    transition: background-color 0.2s, transform 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+.viewer-controls {
+    display: flex;
+    justify-content: center;
+    margin-top: 15px;
+    gap: 15px;
+}
+
+.control-button {
+    background-color: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.control-button:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.control-button:active {
+    transform: scale(0.95);
+}
+
+#close-viewer {
+    background-color: rgba(255, 64, 129, 0.5);
+}
+
+#close-viewer:hover {
+    background-color: rgba(255, 64, 129, 0.8);
+}
+
+.image-info-panel {
+    margin-top: 20px;
+    text-align: center;
+}
+
+#viewer-image-name {
+    margin: 0;
+    font-size: 18px;
+}
+
+#viewer-image-details {
+    color: #ccc;
+    font-size: 14px;
+    margin: 5px 0;
+}
+
+#image-position {
+    color: #aaa;
+    font-size: 14px;
+    margin: 10px 0;
+    font-weight: bold;
+}
+
+.keyboard-shortcuts {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    color: #aaa;
+    font-size: 14px;
+}
+
+.key {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    margin: 0 2px;
 }

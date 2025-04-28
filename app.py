@@ -3,7 +3,9 @@ import json
 import mimetypes
 import time
 import logging
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file
+import threading
+import uuid
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session
 from werkzeug.utils import secure_filename
 from functools import lru_cache
 
@@ -12,6 +14,22 @@ app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 app.config['CACHE_TIMEOUT'] = 60  # Cache timeout in seconds
+
+# Directory scan progress tracking
+scan_tasks = {}
+# Structure: {
+#   'task_id': {
+#     'directory': '/path/to/dir',
+#     'status': 'scanning|complete|error',
+#     'progress': 0-100,
+#     'files_found': 0,
+#     'images_found': 0,
+#     'current_path': '/current/path/being/scanned',
+#     'error': 'error message if any',
+#     'start_time': timestamp,
+#     'end_time': timestamp
+#   }
+# }
 
 # Configure logging
 logging.basicConfig(
@@ -155,6 +173,84 @@ def index():
     
     return render_template('index.html', directory_trees=directory_trees)
 
+@app.route('/scan_directory', methods=['POST'])
+def scan_directory():
+    """Start a background task to scan a directory and track progress."""
+    directory = request.form.get('directory')
+    logger.info(f"Received request to scan directory: {directory}")
+    
+    if not directory:
+        return jsonify({
+            'status': 'error',
+            'message': 'No directory provided'
+        }), 400
+    
+    if not os.path.exists(directory):
+        return jsonify({
+            'status': 'error',
+            'message': f'Directory does not exist: {directory}'
+        }), 400
+    
+    if not os.path.isdir(directory):
+        return jsonify({
+            'status': 'error',
+            'message': f'Path is not a directory: {directory}'
+        }), 400
+    
+    # Generate a unique task ID
+    task_id = str(uuid.uuid4())
+    
+    # Initialize task status
+    scan_tasks[task_id] = {
+        'directory': directory,
+        'status': 'scanning',
+        'progress': 0,
+        'files_found': 0,
+        'images_found': 0,
+        'current_path': directory,
+        'start_time': time.time(),
+        'end_time': None
+    }
+    
+    # Start background scan
+    thread = threading.Thread(target=scan_directory_task, args=(task_id, directory))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        'status': 'started',
+        'task_id': task_id
+    })
+
+@app.route('/scan_status/<task_id>', methods=['GET'])
+def scan_status(task_id):
+    """Get the status of a directory scan."""
+    if task_id not in scan_tasks:
+        return jsonify({
+            'status': 'error',
+            'message': f'Task ID not found: {task_id}'
+        }), 404
+    
+    task = scan_tasks[task_id]
+    
+    # Calculate elapsed time
+    elapsed = time.time() - task['start_time']
+    
+    response = {
+        'status': task['status'],
+        'progress': task['progress'],
+        'files_found': task['files_found'],
+        'images_found': task['images_found'],
+        'current_path': task['current_path'],
+        'elapsed_time': elapsed,
+        'directory': task['directory']
+    }
+    
+    if task['status'] == 'error' and 'error' in task:
+        response['error'] = task['error']
+    
+    return jsonify(response)
+
 @app.route('/add_directory', methods=['POST'])
 def add_directory():
     directory = request.form.get('directory')
@@ -244,5 +340,54 @@ def serve_image():
         return send_file(path)
     return '', 404
 
+def scan_directory_task(task_id, directory):
+    """Background task to scan a directory and count files and images."""
+    task = scan_tasks[task_id]
+    total_files = 0
+    total_images = 0
+    
+    try:
+        # First, count all files to estimate progress
+        logger.info(f"Counting files in {directory}")
+        all_files = []
+        
+        for root, dirs, files in os.walk(directory):
+            task['current_path'] = root
+            all_files.extend([os.path.join(root, f) for f in files])
+            task['files_found'] = len(all_files)
+            # Sleep briefly to avoid hogging CPU
+            time.sleep(0.001)
+        
+        total_files = len(all_files)
+        logger.info(f"Found {total_files} files in {directory}")
+        
+        # Now check which ones are images
+        if total_files > 0:
+            for i, file_path in enumerate(all_files):
+                task['current_path'] = os.path.dirname(file_path)
+                if is_image(file_path):
+                    total_images += 1
+                task['images_found'] = total_images
+                task['progress'] = int((i + 1) / total_files * 100)
+                # Sleep briefly to avoid hogging CPU
+                time.sleep(0.001)
+        
+        # Mark as complete
+        task['status'] = 'complete'
+        task['progress'] = 100
+        task['end_time'] = time.time()
+        logger.info(f"Scan complete: {total_files} files, {total_images} images in {directory}")
+        
+    except Exception as e:
+        logger.error(f"Error scanning directory {directory}: {e}")
+        task['status'] = 'error'
+        task['error'] = str(e)
+        task['end_time'] = time.time()
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    import argparse
+    parser = argparse.ArgumentParser(description='Speedy Photo Management')
+    parser.add_argument('--port', type=int, default=5000, help='Port to run the server on')
+    args = parser.parse_args()
+    
+    app.run(debug=True, port=args.port)
