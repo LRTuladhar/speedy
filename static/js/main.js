@@ -387,6 +387,36 @@ function renderImages(images, gallery) {
     setTimeout(calculateGridDimensions, 100);
 }
 
+// Function to change the current page
+function changePage(page) {
+    // Make sure we have the latest totalPages value
+    const currentTotalPages = Math.ceil(currentImages.length / imagesPerPage);
+    
+    if (page < 1 || page > currentTotalPages || page === currentPage) {
+        console.warn(`Invalid page change request: ${page} (current: ${currentPage}, total: ${currentTotalPages})`);
+        return 0;
+    }
+    
+    console.log(`Changing page from ${currentPage} to ${page} (total pages: ${currentTotalPages})`);
+    
+    currentPage = page;
+    const imagesRendered = renderGalleryForPage(page);
+    
+    // Update pagination UI
+    const pageLinks = document.querySelectorAll('.pagination a');
+    pageLinks.forEach(link => {
+        const linkPage = parseInt(link.getAttribute('data-page'));
+        if (linkPage === page) {
+            link.classList.add('active');
+        } else {
+            link.classList.remove('active');
+        }
+    });
+    
+    console.log(`Changed to page ${page}, rendered ${imagesRendered} images`);
+    return imagesRendered;
+}
+
 function initPaginationControls() {
     // Add event listeners for pagination controls
     const prevPageBtn = document.getElementById('prev-page');
@@ -397,16 +427,14 @@ function initPaginationControls() {
     // Previous page button
     prevPageBtn.addEventListener('click', function() {
         if (currentPage > 1) {
-            currentPage--;
-            renderImages(currentImages, document.getElementById('image-gallery'));
+            changePage(currentPage - 1);
         }
     });
     
     // Next page button
     nextPageBtn.addEventListener('click', function() {
         if (currentPage < totalPages) {
-            currentPage++;
-            renderImages(currentImages, document.getElementById('image-gallery'));
+            changePage(currentPage + 1);
         }
     });
     
@@ -450,6 +478,10 @@ function updatePaginationControls(totalImages, pages) {
         const endIndex = Math.min(startIndex + imagesPerPage - 1, totalImages);
         paginationStatus.textContent = `Showing ${startIndex}-${endIndex} of ${totalImages} images`;
     }
+    
+    // Store the current total pages value in a global variable for navigation
+    totalPages = pages;
+    console.log(`Updated pagination controls: ${totalImages} images, ${pages} pages, current page: ${currentPage}`);
 }
 
 function sortImages(images, sortMethod) {
@@ -719,25 +751,34 @@ function handleKeyNavigation(event) {
         return;
     }
     
-    // Calculate the current absolute index
-    const currentAbsoluteIndex = (currentPage - 1) * imagesPerPage + selectedImageIndex;
+    // Make sure we have the latest totalPages value
+    const currentTotalPages = Math.ceil(currentImages.length / imagesPerPage);
     
     // Calculate new index based on arrow key
     let newIndex = selectedImageIndex;
     let newPage = currentPage;
     let needPageChange = false;
     
+    console.log(`Key navigation: current page ${currentPage}, total pages ${currentTotalPages}, selected index ${selectedImageIndex}, grid columns ${gridColumns}`);
+    
     switch (event.key) {
         case 'ArrowLeft':
             if (selectedImageIndex % gridColumns > 0) {
                 // Move left within the current page
                 newIndex = selectedImageIndex - 1;
-            } else if (currentPage > 1) {
-                // Move to the last column of the previous page
+            } else if (selectedImageIndex === 0 && currentPage > 1) {
+                // Only go to previous page if we're at the very first image of the current page
                 newPage = currentPage - 1;
                 needPageChange = true;
-                // Set to the last column of the row
-                newIndex = Math.min(imagesPerPage - 1, (Math.floor(selectedImageIndex / gridColumns) + 1) * gridColumns - 1);
+                // Go to the last image of the previous page
+                newIndex = imagesPerPage - 1;
+                console.log(`Moving to previous page ${newPage}, target index ${newIndex}`);
+            } else if (selectedImageIndex % gridColumns === 0 && selectedImageIndex > 0) {
+                // If at the start of a row (but not the first row), move to the end of the previous row
+                const prevRowEnd = Math.floor(selectedImageIndex / gridColumns - 1) * gridColumns + (gridColumns - 1);
+                if (prevRowEnd >= 0 && prevRowEnd < images.length) {
+                    newIndex = prevRowEnd;
+                }
             }
             break;
             
@@ -745,12 +786,19 @@ function handleKeyNavigation(event) {
             if (selectedImageIndex % gridColumns < gridColumns - 1 && selectedImageIndex < images.length - 1) {
                 // Move right within the current page
                 newIndex = selectedImageIndex + 1;
-            } else if (currentPage < totalPages) {
-                // Move to the first column of the next page
+            } else if (selectedImageIndex === images.length - 1 && currentPage < currentTotalPages) {
+                // Only go to next page if we're at the very last image of the current page
                 newPage = currentPage + 1;
                 needPageChange = true;
-                // Set to the first column of the same row
-                newIndex = Math.floor(selectedImageIndex / gridColumns) * gridColumns;
+                // Set to the first image of the next page
+                newIndex = 0;
+                console.log(`Moving to next page ${newPage}, target index ${newIndex}`);
+            } else if (selectedImageIndex % gridColumns === gridColumns - 1) {
+                // If at the end of a row (but not the last row), move to the beginning of the next row
+                const nextRowStart = Math.floor(selectedImageIndex / gridColumns + 1) * gridColumns;
+                if (nextRowStart < images.length) {
+                    newIndex = nextRowStart;
+                }
             }
             break;
             
@@ -758,7 +806,8 @@ function handleKeyNavigation(event) {
             if (selectedImageIndex >= gridColumns) {
                 // Move up within the current page
                 newIndex = selectedImageIndex - gridColumns;
-            } else if (currentPage > 1) {
+            } else if (currentPage > 1 && selectedImageIndex < gridColumns) {
+                // Only go to previous page if we're in the first row
                 // Move to the bottom of the previous page
                 newPage = currentPage - 1;
                 needPageChange = true;
@@ -767,6 +816,7 @@ function handleKeyNavigation(event) {
                     imagesPerPage - gridColumns + (selectedImageIndex % gridColumns),
                     imagesPerPage - 1
                 );
+                console.log(`Moving up to previous page ${newPage}, target index ${newIndex}`);
             }
             break;
             
@@ -774,12 +824,17 @@ function handleKeyNavigation(event) {
             if (selectedImageIndex + gridColumns < images.length) {
                 // Move down within the current page
                 newIndex = selectedImageIndex + gridColumns;
-            } else if (currentPage < totalPages) {
-                // Move to the top of the next page
-                newPage = currentPage + 1;
-                needPageChange = true;
-                // Try to maintain the same column position
-                newIndex = selectedImageIndex % gridColumns;
+            } else if (currentPage < currentTotalPages) {
+                // Only go to the next page if we're in the last row
+                const lastRowStart = Math.floor((images.length - 1) / gridColumns) * gridColumns;
+                if (selectedImageIndex >= lastRowStart) {
+                    // Move to the top of the next page
+                    newPage = currentPage + 1;
+                    needPageChange = true;
+                    // Try to maintain the same column position
+                    newIndex = selectedImageIndex % gridColumns;
+                    console.log(`Moving down to next page ${newPage}, target index ${newIndex}`);
+                }
             }
             break;
             
@@ -794,7 +849,7 @@ function handleKeyNavigation(event) {
             break;
             
         case 'PageDown':
-            if (currentPage < totalPages) {
+            if (currentPage < currentTotalPages) {
                 // Move to the next page
                 newPage = currentPage + 1;
                 needPageChange = true;
@@ -816,9 +871,9 @@ function handleKeyNavigation(event) {
             break;
             
         case 'End':
-            if (currentPage < totalPages) {
+            if (currentPage < currentTotalPages) {
                 // Move to the last page
-                newPage = totalPages;
+                newPage = currentTotalPages;
                 needPageChange = true;
                 // Select the last image on the last page
                 const imagesOnLastPage = currentImages.length % imagesPerPage || imagesPerPage;
@@ -832,23 +887,31 @@ function handleKeyNavigation(event) {
     
     // Handle page change if needed
     if (needPageChange) {
+        console.log(`Changing page from ${currentPage} to ${newPage}, target index will be ${newIndex}`);
+        
+        // Store the target index for after page change
+        const targetIndex = newIndex;
+        
         // Change to the new page
         changePage(newPage);
         
         // After the page is rendered, select the appropriate image
         setTimeout(() => {
-            const newImages = Array.from(gallery.querySelectorAll('.image-item'));
+            const newImages = Array.from(document.querySelectorAll('.image-item'));
             if (newImages.length > 0) {
                 // Make sure the index is valid for the new page
-                newIndex = Math.min(newIndex, newImages.length - 1);
-                selectImage(newIndex);
+                const validIndex = Math.min(targetIndex, newImages.length - 1);
+                console.log(`Page changed, selecting index ${validIndex} out of ${newImages.length} images`);
+                selectImage(validIndex);
                 
                 // Ensure the selected image is visible
-                if (newImages[newIndex]) {
-                    newImages[newIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (newImages[validIndex]) {
+                    newImages[validIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
+            } else {
+                console.warn('No images found after page change');
             }
-        }, 100);
+        }, 200); // Increased timeout to ensure page rendering is complete
         
         event.preventDefault();
         return;
@@ -1142,16 +1205,7 @@ function navigateImage(direction) {
         
         // If we need to change page
         if (newPage !== currentPage) {
-            // Update the current page
-            currentPage = newPage;
-            
-            // Update pagination display
-            const totalPages = Math.ceil(totalImages / imagesPerPage);
-            updatePaginationControls(totalImages, totalPages);
-            
-            // Re-render the gallery with the new page
-            const imagesOnPage = renderGalleryForPage(newPage, newRelativeIndex);
-            console.log(`Changed to page ${newPage} with ${imagesOnPage} images`);
+            changePage(newPage);
         } else {
             // Just update the selected image in the grid
             selectImage(newRelativeIndex);
@@ -1216,10 +1270,16 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         img.alt = image.name;
         img.loading = 'lazy';
         
-        // Add click handler
+        // Add click handler for selection only
         div.addEventListener('click', function(e) {
             console.log(`Clicked image: ${image.name} at page index ${idx}, absolute index ${absoluteIndex}`);
             selectImage(idx);
+            e.stopPropagation();
+        });
+        
+        // Add double-click handler to open the image viewer
+        div.addEventListener('dblclick', function(e) {
+            console.log(`Double-clicked image: ${image.name} at page index ${idx}, absolute index ${absoluteIndex}`);
             openImageViewer(idx);
             e.stopPropagation();
         });
