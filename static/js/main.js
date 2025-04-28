@@ -9,7 +9,15 @@ let imagesPerPage = 10;
 let currentImages = [];
 let currentSortMethod = 'date-desc'; // Default sort: date created, newest first
 
+// Application settings
+let appSettings = {
+    trash_folder: ''
+};
+
 document.addEventListener('DOMContentLoaded', function() {
+    // Load application settings
+    loadSettings();
+    
     // Initialize directory tree functionality
     initDirectoryTree();
     
@@ -17,6 +25,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.tree-toggle').forEach(item => {
         item.addEventListener('click', handleTreeItemClick);
     });
+    
+    // Initialize settings modal
+    initSettingsModal();
     
     // Add event listener for the add directory form
     const addDirectoryForm = document.getElementById('add-directory-form');
@@ -54,6 +65,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     hideProgressDialog();
                 } else if (modal.id === 'image-viewer-modal') {
                     closeImageViewer();
+                } else if (modal.id === 'settings-modal') {
+                    hideSettingsModal();
                 }
             }
         });
@@ -413,6 +426,9 @@ function changePage(page) {
         }
     });
     
+    // Update the prev/next buttons state
+    updatePaginationButtonsState(currentTotalPages);
+    
     console.log(`Changed to page ${page}, rendered ${imagesRendered} images`);
     return imagesRendered;
 }
@@ -462,13 +478,7 @@ function initPaginationControls() {
 }
 
 function updatePaginationControls(totalImages, pages) {
-    const prevPageBtn = document.getElementById('prev-page');
-    const nextPageBtn = document.getElementById('next-page');
     const paginationStatus = document.getElementById('pagination-status');
-    
-    // Update buttons state
-    prevPageBtn.disabled = currentPage <= 1 || totalImages === 0;
-    nextPageBtn.disabled = currentPage >= pages || totalImages === 0;
     
     // Update status text
     if (totalImages === 0) {
@@ -481,7 +491,31 @@ function updatePaginationControls(totalImages, pages) {
     
     // Store the current total pages value in a global variable for navigation
     totalPages = pages;
+    
+    // Update the prev/next buttons state
+    updatePaginationButtonsState(pages, totalImages);
+    
     console.log(`Updated pagination controls: ${totalImages} images, ${pages} pages, current page: ${currentPage}`);
+}
+
+// Separate function to update pagination buttons state
+function updatePaginationButtonsState(pages, totalImages = null) {
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    
+    if (!prevPageBtn || !nextPageBtn) {
+        console.error('Pagination buttons not found');
+        return;
+    }
+    
+    // If totalImages is not provided, use the current images length
+    const imageCount = totalImages !== null ? totalImages : currentImages.length;
+    
+    // Update buttons state
+    prevPageBtn.disabled = currentPage <= 1 || imageCount === 0;
+    nextPageBtn.disabled = currentPage >= pages || imageCount === 0;
+    
+    console.log(`Updated pagination buttons: prev ${prevPageBtn.disabled ? 'disabled' : 'enabled'}, next ${nextPageBtn.disabled ? 'disabled' : 'enabled'}`);
 }
 
 function sortImages(images, sortMethod) {
@@ -960,6 +994,38 @@ function handleImageViewerKeyboard(event) {
             event.preventDefault();
             break;
             
+        case 'Delete':
+        case 'Backspace':
+            console.log('Delete key pressed');
+            // Trigger delete action for current image
+            const deleteBtn = document.getElementById('delete-image-viewer');
+            if (deleteBtn && viewerImages[currentViewerIndex]) {
+                // Simulate a click on the delete button
+                const currentImage = viewerImages[currentViewerIndex];
+                if (confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
+                    const imagePath = currentImage.path;
+                    const nextIndex = currentViewerIndex < viewerImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
+                    
+                    deleteImage(imagePath, function() {
+                        // If there are no more images, close the viewer
+                        if (viewerImages.length === 0) {
+                            closeImageViewer();
+                            return;
+                        }
+                        
+                        // Navigate to the next image (or previous if at the end)
+                        if (nextIndex >= 0) {
+                            updateImageViewer(nextIndex);
+                        } else {
+                            // No images left in this direction, close the viewer
+                            closeImageViewer();
+                        }
+                    });
+                }
+            }
+            event.preventDefault();
+            break;
+            
         case 'Home':
             navigateImage('first');
             event.preventDefault();
@@ -1019,52 +1085,66 @@ function initImageViewer() {
     const closeBtn = modal.querySelector('.close');
     const prevBtn = document.getElementById('prev-image');
     const nextBtn = document.getElementById('next-image');
-    // Fullscreen button removed
+    const deleteBtn = document.getElementById('delete-image-viewer');
+    const trashBtn = document.getElementById('trash-image-button');
     
-    // Close button events
+    // Close button event
     closeBtn.addEventListener('click', closeImageViewer);
     
-    // Navigation buttons with debounce to prevent double-clicking
-    prevBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        console.log('Prev button clicked');
-        if (!isNavigating) {
-            navigateImage('prev');
-        }
+    // Previous image button
+    prevBtn.addEventListener('click', function() {
+        navigateImage(-1);
     });
     
-    nextBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        console.log('Next button clicked');
-        if (!isNavigating) {
-            navigateImage('next');
-        }
+    // Next image button
+    nextBtn.addEventListener('click', function() {
+        navigateImage(1);
     });
     
-    // Fullscreen button removed
-    
-    // Click outside to close
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeImageViewer();
+    // Function to handle image deletion
+    const handleImageDelete = function() {
+        // Make sure we're using the correct index
+        if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+            console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot delete image`);
+            return;
         }
-    });
-    
-    // Add global keyboard event listener specifically for the viewer
-    document.addEventListener('keydown', function(e) {
-        if (imageViewerOpen) {
-            // Direct handler for i key
-            if (e.key === 'i' || e.key === 'I') {
-                console.log('i key pressed directly');
-                toggleImageInfo();
-                e.preventDefault();
-                return;
-            }
+        
+        const currentImage = currentImages[currentViewerIndex];
+        if (currentImage && confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
+            const imagePath = currentImage.path;
+            // Store the next index before deletion
+            const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
             
-            // Handle other keyboard navigation
-            handleImageViewerKeyboard(e);
+            console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, next index will be ${nextIndex}`);
+            
+            deleteImage(imagePath, function() {
+                // If there are no more images, close the viewer
+                if (currentImages.length === 0) {
+                    closeImageViewer();
+                    return;
+                }
+                
+                // Navigate to the next image (or previous if at the end)
+                if (nextIndex >= 0 && nextIndex < currentImages.length) {
+                    console.log(`Navigating to next image at index ${nextIndex}`);
+                    updateImageViewer(nextIndex);
+                } else {
+                    // No images left in this direction, close the viewer
+                    closeImageViewer();
+                }
+            });
         }
-    });
+    };
+    
+    // Delete button in the info panel
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', handleImageDelete);
+    }
+    
+    // New trash button at the bottom right of the image
+    if (trashBtn) {
+        trashBtn.addEventListener('click', handleImageDelete);
+    }
     
     console.log('Image viewer initialized with keyboard navigation');
 }
@@ -1080,22 +1160,28 @@ function openImageViewer(index) {
     viewerImages = currentImages;
     
     // Validate index
-    if (index < 0 || index >= viewerImages.length) {
-        console.error(`Invalid image index: ${index}`);
+    if (index < 0 || index >= imagesPerPage) {
+        console.error(`Invalid page-relative image index: ${index}`);
         return;
     }
     
     // Calculate the absolute index based on the current page
-    const startIndex = (currentPage - 1) * imagesPerPage;
-    const absoluteIndex = startIndex + index;
+    const absoluteIndex = (currentPage - 1) * imagesPerPage + index;
     
-    // Set the current viewer index
-    currentViewerIndex = index;
+    // Validate absolute index
+    if (absoluteIndex < 0 || absoluteIndex >= currentImages.length) {
+        console.error(`Invalid absolute image index: ${absoluteIndex}`);
+        return;
+    }
     
-    // Get the image data
-    const image = viewerImages[absoluteIndex];
+    // Set the current viewer index to the absolute index
+    // This is crucial for correct deletion
+    currentViewerIndex = absoluteIndex;
+    
+    // Get the image
+    const image = currentImages[absoluteIndex];
     if (!image) {
-        console.error(`No image found at index ${absoluteIndex}`);
+        console.error(`Image at absolute index ${absoluteIndex} not found!`);
         return;
     }
     
@@ -1167,6 +1253,10 @@ function updateImageViewer(absoluteIndex) {
         return;
     }
     
+    // IMPORTANT: Update the current viewer index to match the absolute index
+    // This fixes the issue with deleting the wrong image
+    currentViewerIndex = absoluteIndex;
+    
     // Update viewer elements
     const viewerImage = document.getElementById('viewer-image');
     const viewerName = document.getElementById('viewer-image-name');
@@ -1183,7 +1273,7 @@ function updateImageViewer(absoluteIndex) {
     // Update navigation buttons
     updateViewerNavigation(absoluteIndex, currentImages.length);
     
-    console.log(`Updated image viewer to show image at absolute index ${absoluteIndex}`);
+    console.log(`Updated image viewer to show image at absolute index ${absoluteIndex}, currentViewerIndex set to ${currentViewerIndex}`);
 }
 
 function navigateImage(direction) {
@@ -1351,8 +1441,22 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         info.className = 'image-info';
         info.textContent = image.name;
         
+        // Add delete button
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-button';
+        deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteButton.title = 'Move to trash';
+        deleteButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (confirm(`Are you sure you want to move "${image.name}" to trash?`)) {
+                deleteImage(image.path);
+            }
+        });
+        
         div.appendChild(img);
         div.appendChild(info);
+        div.appendChild(deleteButton);
         gallery.appendChild(div);
     });
     
@@ -1370,4 +1474,155 @@ function updateViewerNavigation(index, totalImages) {
     // Update visual state
     prevBtn.style.opacity = index <= 0 ? '0.5' : '1';
     nextBtn.style.opacity = index >= totalImages - 1 ? '0.5' : '1';
+}
+
+// Settings functions
+function loadSettings() {
+    fetch('/settings')
+        .then(response => response.json())
+        .then(data => {
+            appSettings = data;
+            console.log('Settings loaded:', appSettings);
+            
+            // Update the settings form with current values
+            const trashFolderInput = document.getElementById('trash-folder');
+            if (trashFolderInput) {
+                trashFolderInput.value = appSettings.trash_folder || '';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading settings:', error);
+        });
+}
+
+function saveSettings() {
+    const trashFolderInput = document.getElementById('trash-folder');
+    if (!trashFolderInput) return;
+    
+    const settings = {
+        trash_folder: trashFolderInput.value.trim()
+    };
+    
+    fetch('/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            appSettings = data.settings;
+            console.log('Settings saved successfully:', appSettings);
+            alert('Settings saved successfully!');
+            hideSettingsModal();
+        } else {
+            console.error('Error saving settings:', data.error);
+            alert('Error saving settings: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        alert('Error saving settings: ' + error.message);
+    });
+}
+
+function initSettingsModal() {
+    // Settings button click handler
+    const settingsButton = document.getElementById('settings-button');
+    if (settingsButton) {
+        settingsButton.addEventListener('click', showSettingsModal);
+    }
+    
+    // Save settings button click handler
+    const saveSettingsButton = document.getElementById('save-settings');
+    if (saveSettingsButton) {
+        saveSettingsButton.addEventListener('click', saveSettings);
+    }
+}
+
+function showSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        // Update form with current settings
+        const trashFolderInput = document.getElementById('trash-folder');
+        if (trashFolderInput) {
+            trashFolderInput.value = appSettings.trash_folder || '';
+        }
+        
+        modal.style.display = 'block';
+    }
+}
+
+function hideSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Delete image function
+function deleteImage(imagePath, callback) {
+    if (!imagePath) {
+        console.error('No image path provided for deletion');
+        return;
+    }
+    
+    console.log(`Deleting image: ${imagePath}`);
+    
+    fetch('/delete-image', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ path: imagePath })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Image deleted successfully:', data.message);
+            
+            // Remove the image from currentImages array
+            const imageIndex = currentImages.findIndex(img => img.path === imagePath);
+            if (imageIndex !== -1) {
+                console.log(`Removing image from currentImages at index ${imageIndex}`);
+                currentImages.splice(imageIndex, 1);
+                
+                // Update pagination if needed
+                if (currentImages.length === 0) {
+                    // No images left
+                    document.getElementById('image-gallery').innerHTML = 
+                        '<div class="no-images-message"><i class="fas fa-image"></i><p>No images found in this directory</p></div>';
+                    updatePaginationControls(0, 0);
+                } else {
+                    // Recalculate total pages
+                    const newTotalPages = Math.ceil(currentImages.length / imagesPerPage);
+                    
+                    // If current page is now beyond total pages, go to last page
+                    if (currentPage > newTotalPages) {
+                        currentPage = newTotalPages;
+                    }
+                    
+                    // Re-render the current page
+                    renderGalleryForPage(currentPage);
+                    updatePaginationControls(currentImages.length, newTotalPages);
+                }
+            }
+            
+            // Since we're using the same array now, we don't need this separate logic
+            // viewerImages and currentImages are the same reference
+            
+            if (typeof callback === 'function') {
+                callback();
+            }
+        } else {
+            console.error('Error deleting image:', data.error);
+            alert('Error deleting image: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting image:', error);
+        alert('Error deleting image: ' + error.message);
+    });
 }

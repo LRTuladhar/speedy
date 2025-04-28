@@ -48,6 +48,57 @@ directory_images_cache = {}
 # Cache invalidation timestamps
 last_directory_change = 0
 
+# Settings file path
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
+
+# Default settings
+DEFAULT_SETTINGS = {
+    'trash_folder': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trash')
+}
+
+def get_settings():
+    """Get application settings, creating default settings if they don't exist"""
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                settings = json.load(f)
+                # Ensure all default settings exist
+                for key, value in DEFAULT_SETTINGS.items():
+                    if key not in settings:
+                        settings[key] = value
+                return settings
+        except Exception as e:
+            logger.error(f"Error reading settings file: {e}")
+    
+    # Create default settings if file doesn't exist
+    save_settings(DEFAULT_SETTINGS)
+    return DEFAULT_SETTINGS.copy()
+
+def save_settings(settings):
+    """Save application settings"""
+    try:
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+        
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving settings: {e}")
+        return False
+
+def ensure_trash_folder():
+    """Ensure the trash folder exists"""
+    settings = get_settings()
+    trash_folder = settings['trash_folder']
+    
+    try:
+        os.makedirs(trash_folder, exist_ok=True)
+        return trash_folder
+    except Exception as e:
+        logger.error(f"Error creating trash folder: {e}")
+        return None
+
 def get_monitored_directories():
     if os.path.exists(MONITORED_DIRS_FILE):
         with open(MONITORED_DIRS_FILE, 'r') as f:
@@ -172,6 +223,72 @@ def index():
             directory_trees.append(get_directory_structure(directory))
     
     return render_template('index.html', directory_trees=directory_trees)
+
+@app.route('/settings', methods=['GET'])
+def get_app_settings():
+    """Get application settings"""
+    return jsonify(get_settings())
+
+@app.route('/settings', methods=['POST'])
+def update_app_settings():
+    """Update application settings"""
+    try:
+        settings = request.json
+        current_settings = get_settings()
+        
+        # Update only provided settings
+        for key, value in settings.items():
+            if key in current_settings:
+                current_settings[key] = value
+        
+        # Save updated settings
+        if save_settings(current_settings):
+            # Ensure trash folder exists
+            ensure_trash_folder()
+            return jsonify({'success': True, 'settings': current_settings})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to save settings'}), 500
+    except Exception as e:
+        logger.error(f"Error updating settings: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/delete-image', methods=['POST'])
+def delete_image():
+    """Move an image to the trash folder"""
+    try:
+        image_path = request.json.get('path')
+        if not image_path or not os.path.exists(image_path):
+            return jsonify({'success': False, 'error': 'Image not found'}), 404
+        
+        # Get the trash folder path
+        trash_folder = ensure_trash_folder()
+        if not trash_folder:
+            return jsonify({'success': False, 'error': 'Failed to create trash folder'}), 500
+        
+        # Create a destination path in the trash folder
+        filename = os.path.basename(image_path)
+        # Add timestamp to avoid name conflicts
+        timestamp = int(time.time())
+        trash_filename = f"{timestamp}_{filename}"
+        trash_path = os.path.join(trash_folder, trash_filename)
+        
+        # Move the file to trash
+        import shutil
+        shutil.move(image_path, trash_path)
+        
+        # Invalidate cache
+        global last_directory_change
+        last_directory_change = time.time()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Image moved to trash',
+            'original_path': image_path,
+            'trash_path': trash_path
+        })
+    except Exception as e:
+        logger.error(f"Error deleting image: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/scan_directory', methods=['POST'])
 def scan_directory():

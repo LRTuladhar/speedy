@@ -17,11 +17,18 @@ body {
 }
 
 header {
-    background-color: #3498db;
+    background-color: #2c3e50;
     color: white;
-    padding: 1rem 2rem;
-    text-align: center;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.header-controls {
+    display: flex;
+    gap: 10px;
 }
 
 header h1 {
@@ -442,7 +449,77 @@ input[type="text"] {
     transition: all 0.3s ease;
 }
 
-/* Fullscreen mode styles removed */
+/* Settings modal styles */
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.settings-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.settings-form label {
+    font-weight: bold;
+}
+
+.settings-form input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+/* Delete button styles */
+.btn-icon {
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.btn-icon:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Delete button in image grid */
+.image-item .delete-button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.image-item:hover .delete-button {
+    opacity: 1;
+}
+
+.image-item .delete-button:hover {
+    background-color: rgba(255, 0, 0, 0.7);
+}
 
 /* Modal Base Styles */
 .modal {
@@ -556,6 +633,31 @@ input[type="text"] {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+}
+
+.image-trash-button {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    z-index: 100;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.image-trash-button:hover {
+    background-color: rgba(255, 0, 0, 0.7);
+    transform: scale(1.1);
 }
 
 .minimal-info {
@@ -563,15 +665,18 @@ input[type="text"] {
     bottom: 15px;
     left: 0;
     width: 100%;
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     background-color: rgba(0, 0, 0, 0.7);
-    padding: 8px 0;
+    padding: 8px 15px;
     font-size: 16px;
     opacity: 0.9;
     transition: opacity 0.3s ease;
     z-index: 100;
     /* Default state is hidden, will be toggled by JavaScript */
     display: none;
+    box-sizing: border-box;
 }
 
 /* Removed image list panel styles as we no longer need them */
@@ -627,7 +732,7 @@ input[type="text"] {
 
 .viewer-controls {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     align-items: center;
     gap: 15px;
 }
