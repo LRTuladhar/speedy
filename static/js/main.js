@@ -937,6 +937,13 @@ function handleImageViewerKeyboard(event) {
             event.preventDefault();
             break;
             
+        case 'i':
+        case 'I':
+            // Toggle image info visibility
+            toggleImageInfo();
+            event.preventDefault();
+            break;
+            
         case 'ArrowLeft':
             console.log('Left arrow key pressed');
             if (!isNavigating) {
@@ -950,6 +957,16 @@ function handleImageViewerKeyboard(event) {
             if (!isNavigating) {
                 navigateImage('next');
             }
+            event.preventDefault();
+            break;
+            
+        case 'Home':
+            navigateImage('first');
+            event.preventDefault();
+            break;
+            
+        case 'End':
+            navigateImage('last');
             event.preventDefault();
             break;
     }
@@ -993,6 +1010,8 @@ function calculateGridDimensions() {
 // Image Viewer Functions
 let currentViewerIndex = -1;
 let isNavigating = false; // Flag to prevent multiple rapid navigation calls
+let viewerImages = [];
+let showImageInfo = false; // Flag to track if image info is visible
 
 function initImageViewer() {
     // Set up image viewer event listeners
@@ -1000,6 +1019,7 @@ function initImageViewer() {
     const closeBtn = modal.querySelector('.close');
     const prevBtn = document.getElementById('prev-image');
     const nextBtn = document.getElementById('next-image');
+    // Fullscreen button removed
     
     // Close button events
     closeBtn.addEventListener('click', closeImageViewer);
@@ -1021,6 +1041,8 @@ function initImageViewer() {
         }
     });
     
+    // Fullscreen button removed
+    
     // Click outside to close
     modal.addEventListener('click', (e) => {
         if (e.target === modal) {
@@ -1031,87 +1053,71 @@ function initImageViewer() {
     // Add global keyboard event listener specifically for the viewer
     document.addEventListener('keydown', function(e) {
         if (imageViewerOpen) {
+            // Direct handler for i key
+            if (e.key === 'i' || e.key === 'I') {
+                console.log('i key pressed directly');
+                toggleImageInfo();
+                e.preventDefault();
+                return;
+            }
+            
+            // Handle other keyboard navigation
             handleImageViewerKeyboard(e);
         }
     });
     
-    console.log('Image viewer initialized with simplified UI and keyboard navigation and debounce protection');
-}
-
-// Navigation debug function has been removed
-
-// This function has been removed as we no longer need the image list panel
-// We're keeping the navigation debug functionality in updateNavigationDebug
-
-// This function has been removed as we no longer need the image list panel
-
-function updateImageViewer(absoluteIndex) {
-    if (!currentImages || absoluteIndex < 0 || absoluteIndex >= currentImages.length) return;
-    
-    // Get the image from the full collection
-    const image = currentImages[absoluteIndex];
-    if (!image) return;
-    
-    // Update viewer elements
-    const viewerImage = document.getElementById('viewer-image');
-    const viewerName = document.getElementById('viewer-image-name');
-    const imageCounter = document.getElementById('image-counter');
-    
-    viewerImage.src = image.url;
-    viewerName.textContent = image.name;
-    imageCounter.textContent = `Image ${absoluteIndex + 1} of ${currentImages.length}`;
-    
-    // Debug information has been removed
-    
-    console.log(`Updated image viewer to show image at absolute index ${absoluteIndex}`);
+    console.log('Image viewer initialized with keyboard navigation');
 }
 
 function openImageViewer(index) {
-    const gallery = document.getElementById('image-gallery');
-    if (!gallery) return;
+    // Get the modal
+    const modal = document.getElementById('image-viewer-modal');
+    const viewerImage = document.getElementById('viewer-image');
+    const imageName = document.getElementById('viewer-image-name');
+    const infoPanel = document.querySelector('.minimal-info');
     
-    const images = Array.from(gallery.querySelectorAll('.image-item'));
-    if (index < 0 || index >= images.length) return;
+    // Set the current images for the viewer
+    viewerImages = currentImages;
     
-    // Get the absolute index directly from the data attribute if available
-    let absoluteIndex;
-    const selectedImage = images[index];
-    if (selectedImage && selectedImage.hasAttribute('data-absolute-index')) {
-        absoluteIndex = parseInt(selectedImage.getAttribute('data-absolute-index'));
-        console.log(`Using data-absolute-index: ${absoluteIndex}`);
-    } else {
-        // Calculate the absolute index in the full image collection
-        absoluteIndex = (currentPage - 1) * imagesPerPage + index;
-        console.log(`Calculated absolute index: ${absoluteIndex}`);
-    }
-    
-    if (absoluteIndex >= currentImages.length) {
-        console.error(`Invalid absolute index: ${absoluteIndex}, max: ${currentImages.length-1}`);
+    // Validate index
+    if (index < 0 || index >= viewerImages.length) {
+        console.error(`Invalid image index: ${index}`);
         return;
     }
     
-    // Set current image index (relative to current page)
+    // Calculate the absolute index based on the current page
+    const startIndex = (currentPage - 1) * imagesPerPage;
+    const absoluteIndex = startIndex + index;
+    
+    // Set the current viewer index
     currentViewerIndex = index;
     
-    // Update the image viewer
-    updateImageViewer(absoluteIndex);
+    // Get the image data
+    const image = viewerImages[absoluteIndex];
+    if (!image) {
+        console.error(`No image found at index ${absoluteIndex}`);
+        return;
+    }
     
-    // Show the modal
-    const modal = document.getElementById('image-viewer-modal');
+    // Set the image source and name
+    viewerImage.src = image.url;
+    imageName.textContent = image.name;
+    
+    // Hide image info by default
+    showImageInfo = false;
+    infoPanel.style.display = 'none';
+    
+    // Display the modal
     modal.style.display = 'block';
     imageViewerOpen = true;
     
-    // Debug information has been removed
+    // Disable scrolling on the body
+    document.body.style.overflow = 'hidden';
     
-    // Debug information
-    console.log(`Opened image viewer for image at absolute index ${absoluteIndex} (page ${currentPage}, relative index ${index})`);
-    console.log(`Current page has ${images.length} images visible in the grid`);
+    // Update navigation buttons
+    updateViewerNavigation(absoluteIndex, viewerImages.length);
     
-    // Log all images for debugging
-    console.log('All images in current collection:');
-    currentImages.forEach((img, i) => {
-        console.log(`[${i}] ${img.name}`);
-    });
+    console.log(`Opened image viewer for image at index ${index} (absolute index: ${absoluteIndex})`);
 }
 
 function closeImageViewer() {
@@ -1120,7 +1126,64 @@ function closeImageViewer() {
     imageViewerOpen = false;
     currentViewerIndex = -1;
     
-    console.log('Closed image viewer');
+    // Re-enable scrolling on the body
+    document.body.style.overflow = 'auto';
+    
+    console.log('Image viewer closed');
+}
+
+// Fullscreen functionality removed
+
+function toggleImageInfo() {
+    const infoPanel = document.querySelector('.minimal-info');
+    if (!infoPanel) {
+        console.error('Info panel not found');
+        return;
+    }
+    
+    showImageInfo = !showImageInfo;
+    
+    if (showImageInfo) {
+        infoPanel.style.display = 'block';
+        console.log('Image info shown');
+    } else {
+        infoPanel.style.display = 'none';
+        console.log('Image info hidden');
+    }
+    
+    console.log(`Info panel display: ${infoPanel.style.display}, showImageInfo: ${showImageInfo}`);
+}
+
+function updateImageViewer(absoluteIndex) {
+    if (!currentImages || absoluteIndex < 0 || absoluteIndex >= currentImages.length) {
+        console.error(`Invalid image index for viewer: ${absoluteIndex}`);
+        return;
+    }
+    
+    // Get the image from the full collection
+    const image = currentImages[absoluteIndex];
+    if (!image) {
+        console.error(`Image at index ${absoluteIndex} not found!`);
+        return;
+    }
+    
+    // Update viewer elements
+    const viewerImage = document.getElementById('viewer-image');
+    const viewerName = document.getElementById('viewer-image-name');
+    const infoPanel = document.querySelector('.minimal-info');
+    
+    viewerImage.src = image.url;
+    viewerName.textContent = image.name;
+    
+    // Maintain current info visibility state
+    if (infoPanel) {
+        infoPanel.style.display = showImageInfo ? 'block' : 'none';
+    }
+    
+    // Update navigation buttons
+    updateViewerNavigation(absoluteIndex, currentImages.length);
+    
+    console.log(`Updated image viewer to show image at absolute index ${absoluteIndex}`);
 }
 
 function navigateImage(direction) {
