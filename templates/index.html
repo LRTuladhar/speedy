@@ -31,9 +31,9 @@
                     <h3>Directory Tree</h3>
                     <ul id="directory-tree-view">
                         {% for tree in directory_trees %}
-                        <li class="tree-item" data-path="{{ tree.path }}">
+                        <li class="tree-item expanded" data-path="{{ tree.path }}">
                             <div class="tree-item-header">
-                                <span class="tree-toggle"><i class="fas fa-folder"></i> {{ tree.name }}</span>
+                                <span class="tree-toggle"><i class="fas fa-folder-open"></i> {{ tree.name }}</span>
                                 <form action="{{ url_for('remove_directory') }}" method="post" class="inline-form">
                                     <input type="hidden" name="directory" value="{{ tree.path }}">
                                     <button type="submit" class="btn-remove"><i class="fas fa-trash"></i></button>
@@ -43,7 +43,9 @@
                                 {% for child in tree.children %}
                                 {% if child.type == 'directory' %}
                                 <li class="tree-item" data-path="{{ child.path }}">
-                                    <span class="tree-toggle"><i class="fas fa-folder"></i> {{ child.name }}</span>
+                                    <div class="tree-item-header">
+                                        <span class="tree-toggle"><i class="fas fa-folder"></i> {{ child.name }}</span>
+                                    </div>
                                     <ul class="tree-children"></ul>
                                 </li>
                                 {% endif %}
@@ -56,6 +58,36 @@
             </div>
             
             <div class="content">
+                <div class="gallery-controls">
+                    <div class="control-row">
+                        <div class="pagination-controls">
+                            <label for="items-per-page">Images per page:</label>
+                            <select id="items-per-page">
+                                <option value="10" selected>10</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="sort-controls">
+                            <label for="sort-by">Sort by:</label>
+                            <select id="sort-by">
+                                <option value="date-desc" selected>Date (Newest First)</option>
+                                <option value="date-asc">Date (Oldest First)</option>
+                                <option value="name-asc">Name (A-Z)</option>
+                                <option value="name-desc">Name (Z-A)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <div class="pagination-info">
+                            <span id="pagination-status">No images loaded</span>
+                        </div>
+                        <div class="pagination-buttons">
+                            <button id="prev-page" class="btn btn-pagination" disabled><i class="fas fa-chevron-left"></i> Previous</button>
+                            <button id="next-page" class="btn btn-pagination" disabled>Next <i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                </div>
                 <div class="image-gallery" id="image-gallery">
                     <div class="gallery-placeholder">
                         <i class="fas fa-images"></i>

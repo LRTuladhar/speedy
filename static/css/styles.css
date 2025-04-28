@@ -136,13 +136,29 @@ input[type="text"] {
     background-color: #f0f0f0;
 }
 
-.tree-toggle.active {
+/* Add a small caret indicator for directories */
+.tree-toggle {
+    position: relative;
+}
+
+.tree-toggle.selected {
     background-color: #e0e0e0;
 }
 
 .tree-children {
     margin-left: 1.5rem;
     list-style: none;
+    display: none;
+}
+
+.tree-item.expanded > .tree-children {
+    display: block;
+}
+
+/* Add a small animation for smooth expand/collapse */
+.tree-children {
+    transition: height 0.2s ease-out;
+    overflow: hidden;
 }
 
 .image-gallery {
@@ -184,6 +200,12 @@ input[type="text"] {
     height: 200px;
     object-fit: cover;
     display: block;
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out;
+}
+
+.image-item img:hover {
+    transform: scale(1.05);
 }
 
 .image-info {
@@ -205,4 +227,73 @@ input[type="text"] {
 
 .inline-form {
     display: inline;
+}
+
+/* Pagination Styles */
+.gallery-controls {
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 1rem;
+    background-color: #f8f8f8;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 1rem;
+}
+
+.control-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.control-row:last-child {
+    margin-bottom: 0;
+}
+
+.pagination-controls, .sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-right: 1rem;
+}
+
+.pagination-controls label, .sort-controls label {
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.pagination-controls select, .sort-controls select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    min-width: 120px;
+}
+
+.pagination-info {
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.pagination-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-pagination {
+    padding: 0.3rem 0.8rem;
+    font-size: 0.9rem;
+    background-color: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.btn-pagination:not(:disabled):hover {
+    background-color: #e0e0e0;
+}
+
+.btn-pagination:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
