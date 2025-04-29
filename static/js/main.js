@@ -749,6 +749,17 @@ function initKeyboardNavigation() {
 let imageViewerOpen = false;
 
 function handleKeyNavigation(event) {
+    // Check if the active element is an input field, textarea, or has contenteditable attribute
+    const activeElement = document.activeElement;
+    const isInputActive = activeElement.tagName === 'INPUT' || 
+                         activeElement.tagName === 'TEXTAREA' || 
+                         activeElement.isContentEditable;
+    
+    // If user is typing in an input field, don't handle keyboard shortcuts
+    if (isInputActive) {
+        return;
+    }
+    
     // If image viewer is open, handle its navigation
     if (imageViewerOpen) {
         handleImageViewerKeyboard(event);
