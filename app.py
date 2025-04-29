@@ -151,8 +151,10 @@ def is_image(file_path):
     mime_type, _ = mimetypes.guess_type(file_path)
     return mime_type and mime_type.startswith('image/')
 
-def get_directory_structure(path):
-    """Return the directory structure as a nested dictionary with caching."""
+def get_directory_structure(path, lazy_load=True):
+    """Return the directory structure as a nested dictionary with caching.
+    When lazy_load is True, only scan the current directory level and not subdirectories.
+    """
     # Check if we have a valid cached version
     cache_key = f"structure:{path}"
     if cache_key in directory_structure_cache:
@@ -169,7 +171,18 @@ def get_directory_structure(path):
         for item in os.listdir(path):
             item_path = os.path.join(path, item)
             if os.path.isdir(item_path):
-                result['children'].append(get_directory_structure(item_path))
+                # If lazy loading, just add a placeholder for the directory
+                if lazy_load:
+                    result['children'].append({
+                        'name': item,
+                        'path': item_path,
+                        'type': 'directory',
+                        'children': [],  # Empty children array as placeholder
+                        'lazy': True     # Mark as lazy loaded
+                    })
+                else:
+                    # If not lazy loading, recursively get the structure
+                    result['children'].append(get_directory_structure(item_path, lazy_load))
             elif os.path.isfile(item_path) and is_image(item_path):
                 result['children'].append({
                     'name': item,
@@ -242,12 +255,20 @@ def get_directory_images(directory_path):
 
 @app.route('/')
 def index():
+    """Main application page. Only show directory names without scanning contents."""
     directories = get_monitored_directories()
     directory_trees = []
     
     for directory in directories:
         if os.path.exists(directory):
-            directory_trees.append(get_directory_structure(directory))
+            # Just create a basic structure with the directory name and path, no scanning
+            directory_trees.append({
+                'name': os.path.basename(directory),
+                'path': directory,
+                'type': 'directory',
+                'children': [],
+                'lazy': True  # Mark as lazy loaded
+            })
     
     return render_template('index.html', directory_trees=directory_trees)
 
@@ -458,14 +479,21 @@ def remove_directory():
 
 @app.route('/get_directory_structure', methods=['GET'])
 def get_structure():
-    directories = get_monitored_directories()
-    directory_trees = []
+    """Get the structure of a specific directory."""
+    directory = request.args.get('directory')
     
-    for directory in directories:
-        if os.path.exists(directory):
-            directory_trees.append(get_directory_structure(directory))
+    if not directory or not os.path.exists(directory) or not os.path.isdir(directory):
+        return jsonify({
+            'name': 'Error',
+            'path': directory or '',
+            'type': 'error',
+            'children': []
+        })
     
-    return jsonify(directory_trees)
+    # Get the structure of just this directory, with lazy loading for subdirectories
+    directory_structure = get_directory_structure(directory, lazy_load=True)
+    
+    return jsonify(directory_structure)
 
 @app.route('/get_directory_images', methods=['GET'])
 def get_images():

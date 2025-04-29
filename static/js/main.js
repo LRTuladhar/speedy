@@ -113,9 +113,16 @@ function initDirectoryTree() {
             }
             
             // If this item has children and they're not loaded yet, load them
-            if (children && children.children.length === 0) {
+            if (children) {
                 const path = treeItem.getAttribute('data-path');
-                loadDirectoryContents(path, children);
+                // Check if this is a lazy-loaded directory that needs to be expanded
+                const isLazy = treeItem.getAttribute('data-lazy') === 'true';
+                
+                if (children.children.length === 0 || isLazy) {
+                    loadDirectoryContents(path, children);
+                    // Mark as no longer lazy-loaded
+                    treeItem.setAttribute('data-lazy', 'false');
+                }
             }
         });
     });
@@ -166,125 +173,88 @@ function handleTreeItemClick(event) {
 }
 
 function loadDirectoryContents(path, container) {
-    // Show loading indicator
-    container.innerHTML = '<li class="loading">Loading...</li>';
+    console.log(`Loading directory contents for ${path}`);
     
     // Check if we have this directory in cache
     if (directoryCache[path]) {
-        console.log(`Loading directory ${path} from cache`);
-        renderDirectoryContents(directoryCache[path], container, path);
+        console.log(`Using cached directory structure for ${path}`);
+        renderDirectoryContents(directoryCache[path], container);
         return;
     }
     
-    // Fetch directory contents
+    // Show loading indicator
+    container.innerHTML = '<li class="loading">Loading...</li>';
+    
+    // Fetch directory structure from server
     fetch(`/get_directory_structure?directory=${encodeURIComponent(path)}`)
         .then(response => response.json())
         .then(data => {
-            // Clear loading indicator
-            container.innerHTML = '';
+            // Cache the result
+            directoryCache[path] = data;
             
-            // Find the directory in the returned data
-            let directory = null;
-            for (const dir of data) {
-                if (dir.path === path) {
-                    directory = dir;
-                    break;
-                }
-                
-                // Check nested directories
-                const findNestedDir = (dirs, targetPath) => {
-                    for (const d of dirs) {
-                        if (d.path === targetPath) {
-                            return d;
-                        }
-                        if (d.children) {
-                            const found = findNestedDir(d.children, targetPath);
-                            if (found) return found;
-                        }
-                    }
-                    return null;
-                };
-                
-                directory = findNestedDir(dir.children || [], path);
-                if (directory) break;
-            }
-            
-            // Store in cache
-            if (directory && directory.children) {
-                directoryCache[path] = directory;
-                console.log(`Cached directory ${path}`);
-            }
-            
-            renderDirectoryContents(directory, container, path);
+            // Render the directory contents
+            renderDirectoryContents(data, container);
         })
         .catch(error => {
             console.error('Error loading directory contents:', error);
-            container.innerHTML = '<li class="error">Error loading directory contents</li>';
+            container.innerHTML = `<li class="error">Error loading directory: ${error.message}</li>`;
         });
 }
 
-function renderDirectoryContents(directory, container, path) {
-    // Clear container
+function renderDirectoryContents(data, container) {
+    // Clear the container
     container.innerHTML = '';
     
-    if (directory && directory.children) {
-        // Add child directories to the tree
-        directory.children.forEach(child => {
-            if (child.type === 'directory') {
-                const li = document.createElement('li');
-                li.className = 'tree-item';
-                li.setAttribute('data-path', child.path);
-                
-                // Create header div to contain toggle and delete button
-                const headerDiv = document.createElement('div');
-                headerDiv.className = 'tree-item-header';
-                
-                const span = document.createElement('span');
-                span.className = 'tree-toggle';
-                span.innerHTML = `<i class="fas fa-folder"></i> ${child.name}`;
-                span.addEventListener('click', function(e) {
-                    // Handle both expanding/collapsing and selection
-                    handleTreeItemClick(e);
-                    
-                    // Manually trigger the expand/collapse functionality
-                    const treeItem = this.closest('.tree-item');
-                    treeItem.classList.toggle('expanded');
-                    
-                    // Toggle folder icon
-                    const folderIcon = this.querySelector('i.fas');
-                    if (folderIcon) {
-                        if (treeItem.classList.contains('expanded')) {
-                            folderIcon.classList.remove('fa-folder');
-                            folderIcon.classList.add('fa-folder-open');
-                        } else {
-                            folderIcon.classList.remove('fa-folder-open');
-                            folderIcon.classList.add('fa-folder');
-                        }
-                    }
-                    
-                    // If children container is empty, load the contents
-                    const childrenContainer = treeItem.querySelector('.tree-children');
-                    if (childrenContainer && childrenContainer.children.length === 0) {
-                        const path = treeItem.getAttribute('data-path');
-                        loadDirectoryContents(path, childrenContainer);
-                    }
-                });
-                
-                headerDiv.appendChild(span);
-                
-                const ul = document.createElement('ul');
-                ul.className = 'tree-children';
-                
-                li.appendChild(headerDiv);
-                li.appendChild(ul);
-                container.appendChild(li);
+    // Sort children by type (directories first) and then by name
+    const sortedChildren = data.children.sort((a, b) => {
+        if (a.type !== b.type) {
+            return a.type === 'directory' ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+    });
+    
+    // Render each child
+    sortedChildren.forEach(child => {
+        if (child.type === 'directory') {
+            // Create directory item
+            const li = document.createElement('li');
+            li.className = 'tree-item';
+            li.setAttribute('data-path', child.path);
+            
+            // If this is a lazy-loaded directory, mark it as such
+            if (child.lazy) {
+                li.setAttribute('data-lazy', 'true');
             }
-        });
-        
-        // If no directories were found, don't show any message
-        // Just leave the container empty
-    } else {
-        container.innerHTML = '<li class="error">Failed to load directory contents</li>';
+                    
+            // Create header with toggle
+            const header = document.createElement('div');
+            header.className = 'tree-item-header';
+            
+            // Create toggle span with folder icon
+            const toggle = document.createElement('span');
+            toggle.className = 'tree-toggle';
+            toggle.innerHTML = `<i class="fas fa-folder"></i> ${child.name}`;
+            toggle.addEventListener('click', handleTreeItemClick);
+            
+            // Add toggle to header
+            header.appendChild(toggle);
+            
+            // Create children container
+            const childrenContainer = document.createElement('ul');
+            childrenContainer.className = 'tree-children';
+            
+            // Add header and children container to list item
+            li.appendChild(header);
+            li.appendChild(childrenContainer);
+            
+            // Add list item to container
+            container.appendChild(li);
+        }
+    });
+    
+    // If no directories were found, show a message
+    if (container.children.length === 0) {
+        container.innerHTML = '<li class="empty">No subdirectories found</li>';
     }
 }
 
