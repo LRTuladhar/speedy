@@ -1267,6 +1267,36 @@ function closeImageViewer() {
     console.log('Image viewer closed');
 }
 
+// Function to update the navigation buttons in the image viewer
+function updateNavigationButtons() {
+    const prevBtn = document.getElementById('prev-image');
+    const nextBtn = document.getElementById('next-image');
+    
+    if (!prevBtn || !nextBtn || !currentImages || currentImages.length === 0) {
+        return;
+    }
+    
+    // Disable previous button if we're at the first image
+    if (currentViewerIndex <= 0) {
+        prevBtn.classList.add('disabled');
+        prevBtn.setAttribute('disabled', 'disabled');
+    } else {
+        prevBtn.classList.remove('disabled');
+        prevBtn.removeAttribute('disabled');
+    }
+    
+    // Disable next button if we're at the last image
+    if (currentViewerIndex >= currentImages.length - 1) {
+        nextBtn.classList.add('disabled');
+        nextBtn.setAttribute('disabled', 'disabled');
+    } else {
+        nextBtn.classList.remove('disabled');
+        nextBtn.removeAttribute('disabled');
+    }
+    
+    console.log(`Navigation buttons updated: prev=${!prevBtn.hasAttribute('disabled')}, next=${!nextBtn.hasAttribute('disabled')}`);
+}
+
 // Update image viewer with the current image
 function updateImageViewer(index) {
     if (index === null || index < 0 || index >= currentImages.length) {
