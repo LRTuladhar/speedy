@@ -5,7 +5,9 @@ import time
 import logging
 import threading
 import uuid
+import shutil
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session
+from PIL import Image
 from werkzeug.utils import secure_filename
 from functools import lru_cache
 
@@ -482,6 +484,86 @@ def serve_image():
     if path and os.path.exists(path) and is_image(path):
         return send_file(path)
     return '', 404
+
+@app.route('/rotate-image', methods=['POST'])
+def rotate_image():
+    """Rotate an image and return the temporary path to the rotated version"""
+    try:
+        image_path = request.json.get('path')
+        direction = request.json.get('direction', 'clockwise')  # clockwise or counterclockwise
+        
+        if not image_path or not os.path.exists(image_path):
+            return jsonify({'success': False, 'error': 'Image not found'}), 404
+        
+        # Open the image with PIL
+        img = Image.open(image_path)
+        
+        # Rotate the image based on direction
+        if direction == 'clockwise':
+            rotated_img = img.rotate(-90, expand=True)  # -90 degrees for clockwise
+        else:  # counterclockwise
+            rotated_img = img.rotate(90, expand=True)   # 90 degrees for counterclockwise
+        
+        # Create a temporary filename for the rotated image
+        filename = os.path.basename(image_path)
+        temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
+        
+        # Create temp directory if it doesn't exist
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        
+        # Save to a temporary file with a timestamp to avoid caching issues
+        timestamp = int(time.time())
+        temp_path = os.path.join(temp_dir, f"{timestamp}_{filename}")
+        rotated_img.save(temp_path)
+        
+        # Return the temporary path and original path
+        return jsonify({
+            'success': True,
+            'message': f'Image rotated {direction}',
+            'original_path': image_path,
+            'temp_path': temp_path,
+            'direction': direction
+        })
+    except Exception as e:
+        logger.error(f"Error rotating image: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/save-rotated-image', methods=['POST'])
+def save_rotated_image():
+    """Save a rotated image, replacing the original"""
+    try:
+        temp_path = request.json.get('temp_path')
+        original_path = request.json.get('original_path')
+        
+        if not temp_path or not os.path.exists(temp_path):
+            return jsonify({'success': False, 'error': 'Temporary rotated image not found'}), 404
+        
+        if not original_path or not os.path.exists(original_path):
+            return jsonify({'success': False, 'error': 'Original image not found'}), 404
+        
+        # Check if we have write permission to the original file
+        if not os.access(os.path.dirname(original_path), os.W_OK):
+            return jsonify({'success': False, 'error': 'No write permission to save the image'}), 403
+        
+        # Copy the temporary file to the original location
+        shutil.copy2(temp_path, original_path)
+        
+        # Remove the temporary file
+        os.remove(temp_path)
+        
+        # Invalidate cache
+        global last_directory_change
+        last_directory_change = time.time()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Rotated image saved',
+            'path': original_path
+        })
+    except Exception as e:
+        logger.error(f"Error saving rotated image: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def is_image_favorited(image_path):
     """Check if an image is already in the favorites folder"""

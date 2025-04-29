@@ -1041,6 +1041,27 @@ function handleImageViewerKeyboard(event) {
             event.preventDefault();
             break;
             
+        case 'r':
+        case 'R':
+            // Rotate image clockwise
+            rotateImage('clockwise');
+            event.preventDefault();
+            break;
+            
+        case 'e':
+        case 'E':
+            // Rotate image counterclockwise
+            rotateImage('counterclockwise');
+            event.preventDefault();
+            break;
+            
+        case 's':
+        case 'S':
+            // Save rotated image
+            saveRotatedImage();
+            event.preventDefault();
+            break;
+            
         case 'ArrowLeft':
             console.log('Left arrow key pressed');
             if (!isNavigating) {
@@ -1140,6 +1161,8 @@ function calculateGridDimensions() {
 let currentViewerIndex = -1;
 let isNavigating = false; // Flag to prevent multiple rapid navigation calls
 let showImageInfo = false; // Flag to track if image info is visible
+let currentRotation = 0; // Track current rotation angle (0, 90, 180, 270)
+let tempRotatedImagePath = null; // Track path to temporary rotated image
 
 function initImageViewer() {
     // Set up image viewer event listeners
@@ -1147,19 +1170,6 @@ function initImageViewer() {
     const closeBtn = modal.querySelector('.close');
     const prevBtn = document.getElementById('prev-image');
     const nextBtn = document.getElementById('next-image');
-    const deleteBtn = document.getElementById('delete-image-viewer');
-    const trashBtn = document.getElementById('trash-image-button');
-    const favoriteBtn = document.getElementById('favorite-image-button');
-    const favoriteViewerBtn = document.getElementById('favorite-image-viewer');
-    
-    // Set data attributes for the favorite buttons
-    if (favoriteBtn) {
-        favoriteBtn.setAttribute('data-path', '');
-    }
-    
-    if (favoriteViewerBtn) {
-        favoriteViewerBtn.setAttribute('data-path', '');
-    }
     
     // Close button event
     closeBtn.addEventListener('click', closeImageViewer);
@@ -1174,88 +1184,8 @@ function initImageViewer() {
         navigateImage('next');
     });
     
-    // Function to handle image deletion
-    const handleImageDelete = function() {
-        // Make sure we're using the correct index
-        if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
-            console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot delete image`);
-            return;
-        }
-        
-        const currentImage = currentImages[currentViewerIndex];
-        if (currentImage && confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
-            const imagePath = currentImage.path;
-            
-            // Determine which image to show next
-            const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
-            
-            console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, next index will be ${nextIndex}`);
-            
-            deleteImage(imagePath, function() {
-                // If there are no more images, close the viewer
-                if (currentImages.length === 0) {
-                    closeImageViewer();
-                    return;
-                }
-                
-                // Navigate to the next image (or previous if at the end)
-                if (nextIndex >= 0) {
-                    updateImageViewer(nextIndex);
-                } else {
-                    // No images left in this direction, close the viewer
-                    closeImageViewer();
-                }
-            });
-        }
-    };
-    
-    // Function to handle toggling image favorite status
-    const handleImageFavorite = function() {
-        if (currentViewerIndex === null || currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
-            console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot toggle favorite status`);
-            return;
-        }
-
-        const currentImage = currentImages[currentViewerIndex];
-        const imagePath = currentImage.path;
-
-        if (imagePath) {
-            console.log(`Toggling favorite status for image: ${currentImage.name}`);
-            // Update the data-path attribute for the favorite buttons
-            if (favoriteBtn) {
-                favoriteBtn.setAttribute('data-path', imagePath);
-            }
-            
-            if (favoriteViewerBtn) {
-                favoriteViewerBtn.setAttribute('data-path', imagePath);
-            }
-            
-            // Call the favorite function
-            favoriteImage(imagePath);
-        }
-    };
-
-    // Delete button in the info panel
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', handleImageDelete);
-    }
-    
-    // New trash button at the bottom right of the image
-    if (trashBtn) {
-        trashBtn.addEventListener('click', handleImageDelete);
-    }
-    
-    // Favorite button in the info panel
-    if (favoriteViewerBtn) {
-        favoriteViewerBtn.addEventListener('click', handleImageFavorite);
-    }
-    
-    // Favorite button at the bottom right of the image
-    if (favoriteBtn) {
-        favoriteBtn.addEventListener('click', handleImageFavorite);
-    }
-    
-    console.log('Image viewer initialized with keyboard navigation');
+    // Create the initial buttons container
+    createImageViewerButtons();
 }
 
 // Function to close the image viewer
@@ -1271,11 +1201,338 @@ function closeImageViewer() {
     // Reset the viewer state
     imageViewerOpen = false;
     currentViewerIndex = -1;
+    currentRotation = 0;
+    tempRotatedImagePath = null;
     
     // Re-enable scrolling on the body
     document.body.style.overflow = 'auto';
     
     console.log('Image viewer closed');
+}
+
+// Function to create or update the image viewer buttons
+function createImageViewerButtons(imagePath = '') {
+    // Get the image container
+    const imageContainer = document.querySelector('.image-container');
+    if (!imageContainer) return;
+    
+    // Remove any existing action buttons container
+    const existingActionButtons = imageContainer.querySelector('.image-action-buttons');
+    if (existingActionButtons) {
+        existingActionButtons.remove();
+    }
+    
+    // Create a single action buttons container for all controls
+    const actionButtons = document.createElement('div');
+    actionButtons.className = 'image-action-buttons';
+    
+    // Create favorite button
+    const favoriteBtn = document.createElement('button');
+    favoriteBtn.id = 'favorite-image-button';
+    favoriteBtn.className = 'image-favorite-button';
+    favoriteBtn.title = 'Add to favorites (F)';
+    favoriteBtn.innerHTML = '<i class="fas fa-star"></i>';
+    favoriteBtn.setAttribute('data-path', imagePath);
+    favoriteBtn.onclick = function() {
+        handleImageFavorite();
+    };
+    
+    // Create trash button
+    const trashBtn = document.createElement('button');
+    trashBtn.id = 'trash-image-button';
+    trashBtn.className = 'image-trash-button';
+    trashBtn.title = 'Move to trash (Delete)';
+    trashBtn.innerHTML = '<i class="fas fa-trash"></i>';
+    trashBtn.onclick = function() {
+        handleImageTrash();
+    };
+    
+    // Create rotate counterclockwise button
+    const rotateLeftBtn = document.createElement('button');
+    rotateLeftBtn.id = 'rotate-left';
+    rotateLeftBtn.className = 'rotate-button';
+    rotateLeftBtn.title = 'Rotate counterclockwise (E)';
+    rotateLeftBtn.innerHTML = '<i class="fas fa-undo"></i>';
+    rotateLeftBtn.onclick = function() {
+        rotateImage('counterclockwise');
+    };
+    
+    // Create rotate clockwise button
+    const rotateRightBtn = document.createElement('button');
+    rotateRightBtn.id = 'rotate-right';
+    rotateRightBtn.className = 'rotate-button';
+    rotateRightBtn.title = 'Rotate clockwise (R)';
+    rotateRightBtn.innerHTML = '<i class="fas fa-redo"></i>';
+    rotateRightBtn.onclick = function() {
+        rotateImage('clockwise');
+    };
+    
+    // Create save button
+    const saveRotationBtn = document.createElement('button');
+    saveRotationBtn.id = 'save-rotation';
+    saveRotationBtn.className = 'rotate-button save-button';
+    saveRotationBtn.title = 'Save rotated image (S)';
+    saveRotationBtn.innerHTML = '<i class="fas fa-save"></i>';
+    saveRotationBtn.style.display = 'none'; // Initially hidden
+    saveRotationBtn.onclick = saveRotatedImage;
+    
+    // Add all buttons to the container
+    actionButtons.appendChild(favoriteBtn);
+    actionButtons.appendChild(trashBtn);
+    actionButtons.appendChild(rotateLeftBtn);
+    actionButtons.appendChild(rotateRightBtn);
+    actionButtons.appendChild(saveRotationBtn);
+    
+    // Add the action buttons container to the image container
+    imageContainer.appendChild(actionButtons);
+    
+    console.log('Image viewer buttons created/updated');
+}
+
+// Function to update the grid image after rotation
+function updateGridImageAfterRotation(imagePath) {
+    // Add a timestamp to force browser to reload the image
+    const timestamp = new Date().getTime();
+    
+    // Find and update the image in the grid
+    const gallery = document.getElementById('image-gallery');
+    if (gallery) {
+        const imageItems = gallery.querySelectorAll('.image-item');
+        imageItems.forEach(item => {
+            const absoluteIndex = parseInt(item.getAttribute('data-absolute-index'), 10);
+            if (absoluteIndex === currentViewerIndex) {
+                const img = item.querySelector('img');
+                if (img) {
+                    // Update the image source with cache-busting parameter
+                    img.src = `/image?path=${encodeURIComponent(imagePath)}&t=${timestamp}`;
+                    console.log('Updated grid image with rotated version');
+                }
+            }
+        });
+    }
+}
+
+// Function to rotate the image
+// Function to handle toggling image favorite status
+function handleImageFavorite() {
+    if (currentViewerIndex === null || currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+        console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot toggle favorite status`);
+        return;
+    }
+
+    const currentImage = currentImages[currentViewerIndex];
+    const imagePath = currentImage.path;
+
+    if (imagePath) {
+        console.log(`Toggling favorite status for image: ${currentImage.name}`);
+        // Call the favorite function
+        favoriteImage(imagePath);
+    }
+}
+
+// Function to handle image trash
+function handleImageTrash() {
+    // Make sure we're using the correct index
+    if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+        console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot delete image`);
+        return;
+    }
+    
+    const currentImage = currentImages[currentViewerIndex];
+    if (currentImage && confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
+        const imagePath = currentImage.path;
+        
+        // Determine which image to show next
+        const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
+        
+        console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, next index will be ${nextIndex}`);
+        
+        deleteImage(imagePath, function() {
+            // If there are no more images, close the viewer
+            if (currentImages.length === 0) {
+                closeImageViewer();
+                return;
+            }
+            
+            // Navigate to the next image (or previous if at the end)
+            if (nextIndex >= 0) {
+                updateImageViewer(nextIndex);
+            } else {
+                // No images left in this direction, close the viewer
+                closeImageViewer();
+            }
+        });
+    }
+}
+
+function rotateImage(direction) {
+    if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+        console.error('Invalid image index for rotation');
+        return;
+    }
+    
+    const currentImage = currentImages[currentViewerIndex];
+    const imagePath = tempRotatedImagePath || currentImage.path;
+    const imageElement = document.getElementById('viewer-image');
+    
+    if (!imageElement) {
+        console.error('Image element not found');
+        return;
+    }
+    
+    // Show loading indicator
+    imageElement.style.opacity = '0.5';
+    
+    // Send request to rotate the image
+    fetch('/rotate-image', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            path: imagePath,
+            direction: direction
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the rotation angle
+            if (direction === 'clockwise') {
+                currentRotation = (currentRotation + 90) % 360;
+            } else {
+                currentRotation = (currentRotation - 90 + 360) % 360;
+            }
+            
+            // Store the temporary path
+            tempRotatedImagePath = data.temp_path;
+            
+            // Update the image source with the rotated image
+            // Add a timestamp to prevent browser caching
+            const timestamp = new Date().getTime();
+            imageElement.src = `/image?path=${encodeURIComponent(data.temp_path)}&t=${timestamp}`;
+            
+            // Reset the transform since we're loading a pre-rotated image
+            imageElement.style.transform = 'rotate(0deg)';
+            
+            // Show save button if not already visible
+            const saveButton = document.getElementById('save-rotation');
+            if (saveButton) {
+                saveButton.style.display = 'flex';
+            }
+            
+            console.log(`Image rotated ${direction}, current angle: ${currentRotation}°`);
+        } else {
+            console.error('Error rotating image:', data.error);
+            alert(`Error rotating image: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error rotating image:', error);
+        alert('Error rotating image. Please try again.');
+    })
+    .finally(() => {
+        // Remove loading indicator
+        imageElement.style.opacity = '1';
+    });
+}
+
+// Function to save the rotated image
+function saveRotatedImage() {
+    if (!tempRotatedImagePath) {
+        console.log('No rotated image to save');
+        return;
+    }
+    
+    if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+        console.error('Invalid image index for saving');
+        return;
+    }
+    
+    const currentImage = currentImages[currentViewerIndex];
+    const originalPath = currentImage.path;
+    const imageElement = document.getElementById('viewer-image');
+    
+    if (!imageElement) {
+        console.error('Image element not found');
+        return;
+    }
+    
+    // Show loading indicator
+    imageElement.style.opacity = '0.5';
+    
+    // Send request to save the rotated image
+    fetch('/save-rotated-image', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            temp_path: tempRotatedImagePath,
+            original_path: originalPath
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reset rotation state
+            currentRotation = 0;
+            tempRotatedImagePath = null;
+            
+            // Hide save button
+            const saveButton = document.getElementById('save-rotation');
+            if (saveButton) {
+                saveButton.style.display = 'none';
+            }
+            
+            console.log('Rotated image saved successfully');
+            
+            // Update the image in the grid immediately
+            updateGridImageAfterRotation(currentImage.path);
+            
+            // Also reload the directory to ensure all data is consistent
+            if (currentDirectory) {
+                loadDirectory(currentDirectory);
+            }
+        } else {
+            console.error('Error saving rotated image:', data.error);
+            alert(`Error saving rotated image: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        // Check if the image was actually saved despite the error
+        console.error('Error in save request:', error);
+        
+        // If tempRotatedImagePath is no longer valid, it might mean the save was successful
+        // but there was an error in the response handling
+        if (!tempRotatedImagePath || !originalPath) {
+            console.log('Image appears to have been saved despite the error');
+            
+            // Reset rotation state
+            currentRotation = 0;
+            tempRotatedImagePath = null;
+            
+            // Hide save button
+            const saveButton = document.getElementById('save-rotation');
+            if (saveButton) {
+                saveButton.style.display = 'none';
+            }
+            
+            // Update the image in the grid immediately
+            updateGridImageAfterRotation(currentImage.path);
+            
+            // Also reload the directory to ensure all data is consistent
+            if (currentDirectory) {
+                loadDirectory(currentDirectory);
+            }
+        } else {
+            alert('Error saving rotated image. Please try again.');
+        }
+    })
+    .finally(() => {
+        // Remove loading indicator
+        imageElement.style.opacity = '1';
+    });
 }
 
 // Function to update the navigation buttons in the image viewer
@@ -1319,11 +1576,16 @@ function updateImageViewer(index) {
     const currentImage = currentImages[index];
     const imagePath = currentImage.path;
     
+    // Reset rotation state for new image
+    currentRotation = 0;
+    tempRotatedImagePath = null;
+    
     // Update the image source
     const imageElement = document.getElementById('viewer-image');
     if (imageElement) {
         imageElement.src = `/image?path=${encodeURIComponent(imagePath)}`;
         imageElement.alt = currentImage.name;
+        imageElement.style.transform = 'rotate(0deg)';
     }
 
     // Update image info
