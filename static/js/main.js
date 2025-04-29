@@ -1052,9 +1052,8 @@ function handleImageViewerKeyboard(event) {
         case 'Backspace':
             console.log('Delete key pressed');
             // Trigger delete action for current image
-            const deleteBtn = document.getElementById('delete-image-viewer');
-            if (deleteBtn && currentImages[currentViewerIndex]) {
-                // Simulate a click on the delete button
+            if (currentImages[currentViewerIndex]) {
+                // Get the current image information
                 const currentImage = currentImages[currentViewerIndex];
                 if (confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
                     const imagePath = currentImage.path;
