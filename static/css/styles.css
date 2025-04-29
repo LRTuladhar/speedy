@@ -506,9 +506,20 @@ input[type="text"] {
     transition: opacity 0.3s;
 }
 
+/* Show action buttons on hover or when selected */
 .image-item:hover .image-action-buttons,
 .image-item.selected .image-action-buttons {
     opacity: 1;
+}
+
+/* Always show favorited buttons regardless of hover state */
+.image-favorite-button.favorited {
+    opacity: 1 !important;
+}
+
+/* Create a separate class for containers with favorited buttons that we'll add via JavaScript */
+.image-action-buttons.has-favorited {
+    opacity: 1 !important;
 }
 
 .image-delete-button {
@@ -550,6 +561,16 @@ input[type="text"] {
     background-color: rgba(255, 215, 0, 0.8);
     color: #333;
     transform: scale(1.1);
+}
+
+/* Styling for favorited state */
+.image-favorite-button.favorited {
+    background-color: rgba(255, 215, 0, 0.8);
+    color: #333;
+}
+
+.image-favorite-button.favorited:hover {
+    background-color: rgba(255, 165, 0, 0.9);
 }
 
 /* Modal Base Styles */

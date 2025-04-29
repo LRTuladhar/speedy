@@ -101,12 +101,24 @@ def ensure_trash_folder():
         return None
 
 def ensure_favorites_folder():
-    """Ensure the favorites folder exists"""
+    """Ensure the favorites folder exists and has proper permissions"""
     settings = get_settings()
     favorites_folder = settings['favorites_folder']
     
     try:
+        # Create the directory if it doesn't exist
         os.makedirs(favorites_folder, exist_ok=True)
+        
+        # Ensure the directory has write permissions
+        if not os.access(favorites_folder, os.W_OK):
+            try:
+                # Try to fix permissions
+                current_mode = os.stat(favorites_folder).st_mode
+                os.chmod(favorites_folder, current_mode | 0o755)  # Add write permission
+                logger.info(f"Updated permissions for favorites folder: {favorites_folder}")
+            except Exception as perm_err:
+                logger.warning(f"Could not update permissions on favorites folder: {perm_err}")
+        
         return favorites_folder
     except Exception as e:
         logger.error(f"Error creating favorites folder: {e}")
@@ -471,14 +483,52 @@ def serve_image():
         return send_file(path)
     return '', 404
 
+def is_image_favorited(image_path):
+    """Check if an image is already in the favorites folder"""
+    if not image_path:
+        return False
+    
+    favorites_folder = ensure_favorites_folder()
+    if not favorites_folder:
+        return False
+    
+    # Get the base filename without the timestamp prefix
+    filename = os.path.basename(image_path)
+    
+    # Check if any file in the favorites folder ends with this filename
+    # This handles the timestamp prefix in the favorited filenames
+    for favorite_file in os.listdir(favorites_folder):
+        if favorite_file.endswith(filename):
+            return os.path.join(favorites_folder, favorite_file)
+    
+    return False
+
 @app.route('/favorite-image', methods=['POST'])
 def favorite_image():
-    """Copy an image to the favorites folder"""
+    """Toggle an image's favorite status - add to or remove from favorites"""
     try:
         image_path = request.json.get('path')
         if not image_path or not os.path.exists(image_path):
             return jsonify({'success': False, 'error': 'Image not found'}), 404
         
+        # Check if image is already favorited
+        favorited_path = is_image_favorited(image_path)
+        
+        # If already favorited, remove it
+        if favorited_path:
+            try:
+                os.remove(favorited_path)
+                return jsonify({
+                    'success': True,
+                    'message': 'Image removed from favorites',
+                    'original_path': image_path,
+                    'was_favorited': True
+                })
+            except Exception as e:
+                logger.error(f"Error removing favorite: {e}")
+                return jsonify({'success': False, 'error': f"Error removing from favorites: {e}"}), 500
+        
+        # If not favorited, add it to favorites
         # Get the favorites folder path
         favorites_folder = ensure_favorites_folder()
         if not favorites_folder:
@@ -491,18 +541,56 @@ def favorite_image():
         favorite_filename = f"{timestamp}_{filename}"
         favorite_path = os.path.join(favorites_folder, favorite_filename)
         
-        # Copy the file to favorites
+        # Copy the file to favorites with robust error handling
         import shutil
-        shutil.copy2(image_path, favorite_path)
+        try:
+            # Try the standard copy first
+            shutil.copy2(image_path, favorite_path)
+        except PermissionError as pe:
+            logger.warning(f"Permission error during copy, trying alternative method: {pe}")
+            try:
+                # Try reading the source file and writing to destination
+                with open(image_path, 'rb') as src_file:
+                    content = src_file.read()
+                    with open(favorite_path, 'wb') as dest_file:
+                        dest_file.write(content)
+                # Try to copy metadata if possible
+                try:
+                    os.chmod(favorite_path, os.stat(image_path).st_mode)
+                except Exception as chmod_err:
+                    logger.warning(f"Could not copy file permissions: {chmod_err}")
+            except Exception as alt_err:
+                logger.error(f"Alternative copy method failed: {alt_err}")
+                raise Exception(f"Error adding image to favorites: {alt_err}")
         
         return jsonify({
             'success': True, 
-            'message': 'Image copied to favorites',
+            'message': 'Image added to favorites',
             'original_path': image_path,
-            'favorite_path': favorite_path
+            'favorite_path': favorite_path,
+            'was_favorited': False
         })
     except Exception as e:
-        logger.error(f"Error favoriting image: {e}")
+        logger.error(f"Error processing favorite action: {e}")
+        return jsonify({'success': False, 'error': f"Error processing favorite action: {e}"}), 500
+
+@app.route('/check-favorited', methods=['POST'])
+def check_favorited():
+    """Check if an image is already in favorites"""
+    try:
+        image_path = request.json.get('path')
+        if not image_path:
+            return jsonify({'success': False, 'error': 'No image path provided'}), 400
+        
+        favorited_path = is_image_favorited(image_path)
+        
+        return jsonify({
+            'success': True,
+            'is_favorited': bool(favorited_path),
+            'favorited_path': favorited_path if favorited_path else None
+        })
+    except Exception as e:
+        logger.error(f"Error checking favorite status: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def scan_directory_task(task_id, directory):

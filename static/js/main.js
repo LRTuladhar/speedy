@@ -764,7 +764,25 @@ function handleKeyNavigation(event) {
     // Handle Enter key to open the selected image in the viewer
     if (event.key === 'Enter') {
         if (selectedImageIndex >= 0 && selectedImageIndex < images.length) {
-            openImageViewer(selectedImageIndex);
+            const selectedImage = images[selectedImageIndex];
+            const absoluteIndex = parseInt(selectedImage.getAttribute('data-absolute-index'), 10);
+            
+            if (!isNaN(absoluteIndex) && absoluteIndex >= 0 && absoluteIndex < currentImages.length) {
+                console.log(`Opening image viewer for image at index ${selectedImageIndex} (absolute index: ${absoluteIndex})`);
+                
+                // Show the image viewer modal
+                const modal = document.getElementById('image-viewer-modal');
+                if (modal) {
+                    modal.style.display = 'block';
+                    imageViewerOpen = true;
+                    
+                    // Disable scrolling on the body
+                    document.body.style.overflow = 'hidden';
+                    
+                    // Update the image viewer with the selected image
+                    updateImageViewer(absoluteIndex);
+                }
+            }
             event.preventDefault();
         }
         return;
@@ -1123,6 +1141,15 @@ function initImageViewer() {
     const favoriteBtn = document.getElementById('favorite-image-button');
     const favoriteViewerBtn = document.getElementById('favorite-image-viewer');
     
+    // Set data attributes for the favorite buttons
+    if (favoriteBtn) {
+        favoriteBtn.setAttribute('data-path', '');
+    }
+    
+    if (favoriteViewerBtn) {
+        favoriteViewerBtn.setAttribute('data-path', '');
+    }
+    
     // Close button event
     closeBtn.addEventListener('click', closeImageViewer);
     
@@ -1171,23 +1198,32 @@ function initImageViewer() {
         }
     };
     
-    // Function to handle adding image to favorites
+    // Function to handle toggling image favorite status
     const handleImageFavorite = function() {
-        // Make sure we're using the correct index
-        if (currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
-            console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot favorite image`);
+        if (currentViewerIndex === null || currentViewerIndex < 0 || currentViewerIndex >= currentImages.length) {
+            console.error(`Invalid currentViewerIndex: ${currentViewerIndex}, cannot toggle favorite status`);
             return;
         }
-        
+
         const currentImage = currentImages[currentViewerIndex];
-        if (currentImage) {
-            const imagePath = currentImage.path;
-            console.log(`Adding image to favorites: ${currentImage.name}`);
+        const imagePath = currentImage.path;
+
+        if (imagePath) {
+            console.log(`Toggling favorite status for image: ${currentImage.name}`);
+            // Update the data-path attribute for the favorite buttons
+            if (favoriteBtn) {
+                favoriteBtn.setAttribute('data-path', imagePath);
+            }
             
+            if (favoriteViewerBtn) {
+                favoriteViewerBtn.setAttribute('data-path', imagePath);
+            }
+            
+            // Call the favorite function
             favoriteImage(imagePath);
         }
     };
-    
+
     // Delete button in the info panel
     if (deleteBtn) {
         deleteBtn.addEventListener('click', handleImageDelete);
@@ -1211,63 +1247,17 @@ function initImageViewer() {
     console.log('Image viewer initialized with keyboard navigation');
 }
 
-function openImageViewer(index) {
-    // Get the modal
-    const modal = document.getElementById('image-viewer-modal');
-    const viewerImage = document.getElementById('viewer-image');
-    const imageName = document.getElementById('viewer-image-name');
-    const infoPanel = document.querySelector('.minimal-info');
-    
-    // Validate index
-    if (index < 0 || index >= imagesPerPage) {
-        console.error(`Invalid page-relative image index: ${index}`);
-        return;
-    }
-    
-    // Calculate the absolute index based on the current page
-    const absoluteIndex = (currentPage - 1) * imagesPerPage + index;
-    
-    // Validate absolute index
-    if (absoluteIndex < 0 || absoluteIndex >= currentImages.length) {
-        console.error(`Invalid absolute image index: ${absoluteIndex}`);
-        return;
-    }
-    
-    // Get the image
-    const image = currentImages[absoluteIndex];
-    if (!image) {
-        console.error(`Image at absolute index ${absoluteIndex} not found!`);
-        return;
-    }
-    
-    // Set the current viewer index to the absolute index
-    // This is crucial for correct navigation and deletion
-    currentViewerIndex = absoluteIndex;
-    
-    // Set the image source and name
-    viewerImage.src = image.url;
-    imageName.textContent = image.name;
-    
-    // Hide image info by default
-    showImageInfo = false;
-    infoPanel.style.display = 'none';
-    
-    // Display the modal
-    modal.style.display = 'block';
-    imageViewerOpen = true;
-    
-    // Disable scrolling on the body
-    document.body.style.overflow = 'hidden';
-    
-    // Update navigation buttons
-    updateViewerNavigation(absoluteIndex, currentImages.length);
-    
-    console.log(`Opened image viewer for image at index ${index} (absolute index: ${absoluteIndex})`);
-}
-
+// Function to close the image viewer
 function closeImageViewer() {
+    console.log('Closing image viewer');
+    
+    // Hide the modal
     const modal = document.getElementById('image-viewer-modal');
-    modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    
+    // Reset the viewer state
     imageViewerOpen = false;
     currentViewerIndex = -1;
     
@@ -1277,60 +1267,56 @@ function closeImageViewer() {
     console.log('Image viewer closed');
 }
 
-// Fullscreen functionality removed
-
-function toggleImageInfo() {
-    const infoPanel = document.querySelector('.minimal-info');
-    if (!infoPanel) {
-        console.error('Info panel not found');
-        return;
-    }
-    
-    showImageInfo = !showImageInfo;
-    
-    if (showImageInfo) {
-        infoPanel.style.display = 'block';
-        console.log('Image info shown');
-    } else {
-        infoPanel.style.display = 'none';
-        console.log('Image info hidden');
-    }
-    
-    console.log(`Info panel display: ${infoPanel.style.display}, showImageInfo: ${showImageInfo}`);
-}
-
+// Update image viewer with the current image
 function updateImageViewer(index) {
-    if (!currentImages || index < 0 || index >= currentImages.length) {
-        console.error(`Invalid image index for viewer: ${index}`);
+    if (index === null || index < 0 || index >= currentImages.length) {
+        console.error(`Invalid index: ${index}`);
         return;
     }
-    
-    // Get the image from the collection
-    const image = currentImages[index];
-    if (!image) {
-        console.error(`Image at index ${index} not found!`);
-        return;
-    }
-    
-    // IMPORTANT: Update the current viewer index to match the index
-    // This fixes the issue with navigating to the wrong image
+
     currentViewerIndex = index;
+    const currentImage = currentImages[index];
+    const imagePath = currentImage.path;
     
-    // Update viewer elements
-    const viewerImage = document.getElementById('viewer-image');
-    const viewerName = document.getElementById('viewer-image-name');
-    const infoPanel = document.querySelector('.minimal-info');
-    
-    viewerImage.src = image.url;
-    viewerName.textContent = image.name;
-    
-    // Maintain current info visibility state
-    if (infoPanel) {
-        infoPanel.style.display = showImageInfo ? 'block' : 'none';
+    // Update the image source
+    const imageElement = document.getElementById('viewer-image');
+    if (imageElement) {
+        imageElement.src = `/image?path=${encodeURIComponent(imagePath)}`;
+        imageElement.alt = currentImage.name;
+    }
+
+    // Update image info
+    const imageInfoName = document.getElementById('image-info-name');
+    if (imageInfoName) {
+        imageInfoName.textContent = currentImage.name;
     }
     
+    // Update the data-path attribute for the favorite buttons
+    const favoriteBtn = document.getElementById('favorite-image-button');
+    const favoriteViewerBtn = document.getElementById('favorite-image-viewer');
+    
+    if (favoriteBtn) {
+        favoriteBtn.setAttribute('data-path', imagePath);
+    }
+    
+    if (favoriteViewerBtn) {
+        favoriteViewerBtn.setAttribute('data-path', imagePath);
+    }
+    
+    // Check if this image is favorited and update the buttons
+    checkImageFavorited(imagePath, (isFavorited) => {
+        updateFavoriteButtonAppearance(favoriteBtn, isFavorited);
+        updateFavoriteButtonAppearance(favoriteViewerBtn, isFavorited);
+    });
+
     // Update navigation buttons
-    updateViewerNavigation(index, currentImages.length);
+    updateNavigationButtons();
+
+    // Update the viewer title
+    const viewerTitle = document.getElementById('image-viewer-title');
+    if (viewerTitle) {
+        viewerTitle.textContent = `${index + 1} / ${currentImages.length}`;
+    }
     
     console.log(`Updated image viewer to show image at index ${index}, currentViewerIndex set to ${currentViewerIndex}`);
 }
@@ -1465,9 +1451,36 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         img.alt = image.name;
         img.loading = 'lazy'; // Use lazy loading for better performance
         
-        // Add click event to open the image viewer
+        // Add click event to select the image (not open viewer)
         img.addEventListener('click', function() {
-            openImageViewer(idx);
+            // Get the index from the parent div
+            const index = parseInt(div.getAttribute('data-index'), 10);
+            if (!isNaN(index)) {
+                selectImage(index);
+            }
+        });
+        
+        // Add double-click event to open the image viewer
+        img.addEventListener('dblclick', function() {
+            // Get the absolute index from the parent div
+            const absoluteIndex = parseInt(div.getAttribute('data-absolute-index'), 10);
+            
+            if (!isNaN(absoluteIndex) && absoluteIndex >= 0 && absoluteIndex < currentImages.length) {
+                console.log(`Opening image viewer for image at index ${idx} (absolute index: ${absoluteIndex})`);
+                
+                // Show the image viewer modal
+                const modal = document.getElementById('image-viewer-modal');
+                if (modal) {
+                    modal.style.display = 'block';
+                    imageViewerOpen = true;
+                    
+                    // Disable scrolling on the body
+                    document.body.style.overflow = 'hidden';
+                    
+                    // Update the image viewer with the selected image
+                    updateImageViewer(absoluteIndex);
+                }
+            }
         });
         
         // Create image info element
@@ -1475,7 +1488,6 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         info.className = 'image-info';
         info.innerHTML = `
             <div class="image-name">${image.name}</div>
-            <div class="image-date">${new Date(image.date * 1000).toLocaleDateString()}</div>
         `;
         
         // Create action buttons container
@@ -1486,7 +1498,18 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         const favoriteButton = document.createElement('button');
         favoriteButton.className = 'image-favorite-button';
         favoriteButton.title = 'Add to favorites';
-        favoriteButton.innerHTML = '<i class="fas fa-star"></i>';
+        favoriteButton.setAttribute('data-path', image.path);
+        favoriteButton.innerHTML = '<i class="far fa-star"></i>'; // Start with outline star
+        
+        // Check if this image is already favorited
+        checkImageFavorited(image.path, (isFavorited) => {
+            updateFavoriteButtonAppearance(favoriteButton, isFavorited);
+            
+            // If favorited, make sure the action buttons container is visible
+            if (isFavorited) {
+                actionButtons.classList.add('has-favorited');
+            }
+        });
         
         // Add click event to favorite button
         favoriteButton.addEventListener('click', function(e) {
@@ -1511,8 +1534,8 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         });
         
         // Add buttons to action buttons container
-        actionButtons.appendChild(favoriteButton);
         actionButtons.appendChild(deleteButton);
+        actionButtons.appendChild(favoriteButton);
         
         // Add all elements to the image item
         div.appendChild(img);
@@ -1698,14 +1721,76 @@ function deleteImage(imagePath, callback) {
     });
 }
 
-// Favorite image function
-function favoriteImage(imagePath) {
+// Check if an image is favorited
+function checkImageFavorited(imagePath, callback) {
     if (!imagePath) {
-        console.error('No image path provided for favorite');
+        console.error('No image path provided for favorite check');
         return;
     }
     
-    console.log(`Adding image to favorites: ${imagePath}`);
+    fetch('/check-favorited', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ path: imagePath })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (callback && typeof callback === 'function') {
+                callback(data.is_favorited);
+            }
+        } else {
+            console.error('Error checking favorite status:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error checking favorite status:', error);
+    });
+}
+
+// Update favorite button appearance based on favorite status
+function updateFavoriteButtonAppearance(button, isFavorited) {
+    if (!button) return;
+    
+    if (isFavorited) {
+        button.classList.add('favorited');
+        button.title = 'Remove from favorites';
+        // Change the star to filled
+        button.innerHTML = '<i class="fas fa-star"></i>';
+        
+        // Find parent container and add has-favorited class
+        const parentContainer = button.closest('.image-action-buttons');
+        if (parentContainer) {
+            parentContainer.classList.add('has-favorited');
+        }
+    } else {
+        button.classList.remove('favorited');
+        button.title = 'Add to favorites';
+        // Change to outline star
+        button.innerHTML = '<i class="far fa-star"></i>';
+        
+        // Find parent container and remove has-favorited class if no other favorited buttons
+        const parentContainer = button.closest('.image-action-buttons');
+        if (parentContainer) {
+            // Check if there are any other favorited buttons in this container
+            const hasFavoritedButtons = parentContainer.querySelector('.image-favorite-button.favorited');
+            if (!hasFavoritedButtons) {
+                parentContainer.classList.remove('has-favorited');
+            }
+        }
+    }
+}
+
+// Favorite image function - now toggles favorite status
+function favoriteImage(imagePath) {
+    if (!imagePath) {
+        console.error('No image path provided for favorite toggle');
+        return;
+    }
+    
+    console.log(`Toggling favorite status for image: ${imagePath}`);
     
     fetch('/favorite-image', {
         method: 'POST',
@@ -1717,15 +1802,40 @@ function favoriteImage(imagePath) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            console.log('Image added to favorites successfully:', data.message);
-            alert('Image added to favorites!');
+            console.log(data.message);
+            
+            // Update UI based on whether it was favorited or unfavorited
+            const wasFavorited = data.was_favorited;
+            
+            // Find and update all buttons for this image
+            const favoriteButtons = document.querySelectorAll('.image-favorite-button');
+            favoriteButtons.forEach(button => {
+                const buttonImagePath = button.getAttribute('data-path');
+                if (buttonImagePath === imagePath) {
+                    updateFavoriteButtonAppearance(button, !wasFavorited);
+                }
+            });
+            
+            // Update viewer buttons if they exist
+            const favoriteBtn = document.getElementById('favorite-image-button');
+            const favoriteViewerBtn = document.getElementById('favorite-image-viewer');
+            
+            if (favoriteBtn && favoriteBtn.getAttribute('data-path') === imagePath) {
+                updateFavoriteButtonAppearance(favoriteBtn, !wasFavorited);
+            }
+            
+            if (favoriteViewerBtn && favoriteViewerBtn.getAttribute('data-path') === imagePath) {
+                updateFavoriteButtonAppearance(favoriteViewerBtn, !wasFavorited);
+            }
+            
+            // No dialog boxes for favorite actions as per user preference
         } else {
-            console.error('Error adding image to favorites:', data.error);
-            alert('Error adding image to favorites: ' + data.error);
+            console.error('Error toggling favorite status:', data.error);
+            // Only log errors, don't show alerts
         }
     })
     .catch(error => {
-        console.error('Error adding image to favorites:', error);
-        alert('Error adding image to favorites: ' + error.message);
+        console.error('Error toggling favorite status:', error);
+        // Only log errors, don't show alerts
     });
 }
