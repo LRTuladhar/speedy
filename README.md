@@ -7,6 +7,7 @@ Speedy is a simple and fast photo management application built with Python and F
 - Add and remove directories to monitor
 - Navigate directory trees in the left sidebar
 - View image thumbnails in the main content area with pagination
+- Filter photos to show only favorites with a single toggle
 - Full-screen image viewer with keyboard navigation
 - Mark photos as favorites with one click
 - Move unwanted photos to trash
@@ -54,6 +55,7 @@ python app.py
 
 6. View and manage your photos:
    - Browse image thumbnails in the main content area
+   - Use the "Favorites only" toggle next to the sort dropdown to filter and show only favorited images
    - Click on an image to open it in the full-screen viewer
    - Use the star icon to mark photos as favorites
    - Use the trash icon to move unwanted photos to the trash folder
