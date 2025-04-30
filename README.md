@@ -9,6 +9,7 @@ Speedy is a simple and fast photo management application built with Python and F
 - View image thumbnails in the main content area with pagination
 - Filter photos to show only favorites with a single toggle
 - Full-screen image viewer with keyboard navigation
+- Rotate images clockwise or counterclockwise and save the rotated versions
 - Mark photos as favorites with one click
 - Move unwanted photos to trash
 - Customizable settings for trash and favorites folders
@@ -59,6 +60,8 @@ python app.py
    - Click on an image to open it in the full-screen viewer
    - Use the star icon to mark photos as favorites
    - Use the trash icon to move unwanted photos to the trash folder
+   - Rotate images using the rotation buttons in the image viewer or keyboard shortcuts (R/E)
+   - Save rotated images with the save button or S key to permanently apply the rotation
    - Navigate between images using arrow keys or the on-screen navigation buttons
 
 7. Use pagination controls to browse through large collections
@@ -91,6 +94,9 @@ All dependencies are listed in the requirements.txt file.
 - **Right Arrow**: Next image
 - **Home**: First image
 - **End**: Last image
+- **R**: Rotate image clockwise
+- **E**: Rotate image counterclockwise
+- **S**: Save rotated image
 - **Delete/Backspace**: Move current image to trash
 - **Escape**: Close image viewer
 - **I**: Toggle image information panel
