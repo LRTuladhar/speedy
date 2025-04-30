@@ -871,7 +871,7 @@ function handleKeyNavigation(event) {
             const absoluteIndex = parseInt(selectedImage.getAttribute('data-absolute-index'), 10);
             if (!isNaN(absoluteIndex) && absoluteIndex >= 0 && absoluteIndex < currentImages.length) {
                 const image = currentImages[absoluteIndex];
-                if (confirm(`Are you sure you want to move "${image.name}" to trash?`)) {
+                if (1) {
                     console.log(`Deleting image at index ${selectedImageIndex} (absolute index: ${absoluteIndex}): ${image.name}`);
                     deleteImage(image.path);
                     event.preventDefault();
@@ -1134,26 +1134,38 @@ function handleImageViewerKeyboard(event) {
             if (currentImages[currentViewerIndex]) {
                 // Get the current image information
                 const currentImage = currentImages[currentViewerIndex];
-                if (confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
-                    const imagePath = currentImage.path;
-                    const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
+                // No confirmation dialog as per user preference
+                const imagePath = currentImage.path;
+                const currentPosition = currentViewerIndex;
+                
+                // Store the position (first, middle, last) rather than a specific index
+                const position = currentViewerIndex === 0 ? 'first' : 
+                                (currentViewerIndex === currentImages.length - 1 ? 'last' : 'middle');
+                
+                deleteImage(imagePath, function() {
+                    // If there are no more images, close the viewer
+                    if (currentImages.length === 0) {
+                        closeImageViewer();
+                        return;
+                    }
                     
-                    deleteImage(imagePath, function() {
-                        // If there are no more images, close the viewer
-                        if (currentImages.length === 0) {
-                            closeImageViewer();
-                            return;
-                        }
-                        
-                        // Navigate to the next image (or previous if at the end)
-                        if (nextIndex >= 0) {
-                            updateImageViewer(nextIndex);
-                        } else {
-                            // No images left in this direction, close the viewer
-                            closeImageViewer();
-                        }
-                    });
-                }
+                    // Choose the next image based on position rather than index
+                    let newIndex;
+                    if (position === 'first') {
+                        // If we deleted the first image, stay at index 0 (the new first image)
+                        newIndex = 0;
+                    } else if (position === 'last') {
+                        // If we deleted the last image, go to the new last image
+                        newIndex = currentImages.length - 1;
+                    } else {
+                        // If we deleted a middle image, try to stay at the same index
+                        // This will show the image that was after the deleted one
+                        newIndex = Math.min(currentPosition, currentImages.length - 1);
+                    }
+                    
+                    console.log(`After deletion, showing image at new index: ${newIndex}`);
+                    updateImageViewer(newIndex);
+                });
             }
             event.preventDefault();
             break;
@@ -1387,13 +1399,16 @@ function handleImageTrash() {
     }
     
     const currentImage = currentImages[currentViewerIndex];
-    if (currentImage && confirm(`Are you sure you want to move "${currentImage.name}" to trash?`)) {
+    if (currentImage) {
         const imagePath = currentImage.path;
+        const currentPosition = currentViewerIndex;
         
-        // Determine which image to show next
-        const nextIndex = currentViewerIndex < currentImages.length - 1 ? currentViewerIndex + 1 : currentViewerIndex - 1;
+        // Store the position (first, middle, last) rather than a specific index
+        // This is more reliable when the array changes
+        const position = currentViewerIndex === 0 ? 'first' : 
+                        (currentViewerIndex === currentImages.length - 1 ? 'last' : 'middle');
         
-        console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, next index will be ${nextIndex}`);
+        console.log(`Deleting image at index ${currentViewerIndex}: ${currentImage.name}, position: ${position}`);
         
         deleteImage(imagePath, function() {
             // If there are no more images, close the viewer
@@ -1402,13 +1417,22 @@ function handleImageTrash() {
                 return;
             }
             
-            // Navigate to the next image (or previous if at the end)
-            if (nextIndex >= 0) {
-                updateImageViewer(nextIndex);
+            // Choose the next image based on position rather than index
+            let newIndex;
+            if (position === 'first') {
+                // If we deleted the first image, stay at index 0 (the new first image)
+                newIndex = 0;
+            } else if (position === 'last') {
+                // If we deleted the last image, go to the new last image
+                newIndex = currentImages.length - 1;
             } else {
-                // No images left in this direction, close the viewer
-                closeImageViewer();
+                // If we deleted a middle image, try to stay at the same index
+                // This will show the image that was after the deleted one
+                newIndex = Math.min(currentPosition, currentImages.length - 1);
             }
+            
+            console.log(`After deletion, showing image at new index: ${newIndex}`);
+            updateImageViewer(newIndex);
         });
     }
 }
@@ -1879,7 +1903,7 @@ function renderGalleryForPage(page, selectedIndex = -1) {
         deleteButton.addEventListener('click', function(e) {
             e.stopPropagation(); // Prevent opening the image viewer
             e.preventDefault();
-            if (confirm(`Are you sure you want to move "${image.name}" to trash?`)) {
+            if (1) {
                 deleteImage(image.path);
             }
         });
