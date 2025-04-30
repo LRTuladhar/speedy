@@ -56,6 +56,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize pagination controls
     initPaginationControls();
     
+    // Initialize favorites toggle button
+    initFavoritesToggle();
+    
     // Initialize modal close buttons
     document.querySelectorAll('.modal .close').forEach(closeBtn => {
         closeBtn.addEventListener('click', function() {
@@ -332,11 +335,55 @@ function renderImages(images, gallery) {
     
     console.log(`Original images: ${sortedImages.length}, After removing duplicates: ${validImages.length}`);
     
-    // Store the deduplicated images for pagination
-    currentImages = validImages;
+    // Check if favorites filter is active
+    const favoritesToggle = document.getElementById('favorites-toggle');
+    const showFavoritesOnly = favoritesToggle && favoritesToggle.classList.contains('active');
     
+    if (showFavoritesOnly) {
+        console.log('Filtering by favorites only');
+        // We need to check each image if it's favorited
+        const filteredImages = [];
+        
+        // Create a promise for each image check
+        const checkPromises = validImages.map(img => {
+            return new Promise(resolve => {
+                checkImageFavorited(img.path, isFavorited => {
+                    if (isFavorited) {
+                        filteredImages.push(img);
+                    }
+                    resolve();
+                });
+            });
+        });
+        
+        // Wait for all checks to complete, then update the UI
+        Promise.all(checkPromises).then(() => {
+            console.log(`Filtered to ${filteredImages.length} favorited images`);
+            currentImages = filteredImages;
+            continueRenderingImages(gallery);
+        });
+        return; // Exit early, rendering will continue after favorites check
+    }
+    
+    // If not filtering by favorites, use all valid images
+    currentImages = validImages;
+    continueRenderingImages(gallery);
+}
+
+// Helper function to continue rendering after potential favorites filtering
+function continueRenderingImages(gallery) {
+    // Check if we have any images to display
     if (currentImages.length === 0) {
-        gallery.innerHTML = '<div class="gallery-placeholder"><i class="fas fa-images"></i><p>No images found in this directory</p></div>';
+        // Show different message based on whether favorites filter is active
+        const favoritesToggle = document.getElementById('favorites-toggle');
+        const showFavoritesOnly = favoritesToggle && favoritesToggle.classList.contains('active');
+        
+        if (showFavoritesOnly) {
+            gallery.innerHTML = '<div class="gallery-placeholder"><i class="fas fa-star"></i><p>No favorited images found in this directory</p></div>';
+        } else {
+            gallery.innerHTML = '<div class="gallery-placeholder"><i class="fas fa-images"></i><p>No images found in this directory</p></div>';
+        }
+        
         updatePaginationControls(0, 0);
         // Reset selected image when no images
         selectedImageIndex = -1;
@@ -600,13 +647,45 @@ function updateProgressDialog(data) {
 }
 
 function formatTime(seconds) {
-    if (seconds < 60) {
-        return `${seconds}s`;
-    } else {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    
+    if (minutes > 0) {
         return `${minutes}m ${remainingSeconds}s`;
+    } else {
+        return `${remainingSeconds}s`;
     }
+}
+
+// Initialize favorites toggle button
+function initFavoritesToggle() {
+    const toggleButton = document.getElementById('favorites-toggle');
+    if (!toggleButton) return;
+    
+    toggleButton.addEventListener('click', function() {
+        // Toggle active class for styling
+        this.classList.toggle('active');
+        
+        // Get the current active directory path
+        const activeTreeItem = document.querySelector('.tree-toggle.selected');
+        if (activeTreeItem) {
+            const treeItem = activeTreeItem.closest('.tree-item');
+            if (treeItem) {
+                const path = treeItem.getAttribute('data-path');
+                if (path) {
+                    console.log(`Favorites filter toggled: ${this.classList.contains('active')}, refreshing images for ${path}`);
+                    
+                    // If we have images in cache, re-render them with the filter
+                    if (imageCache[path]) {
+                        const gallery = document.getElementById('image-gallery');
+                        if (gallery) {
+                            renderImages(imageCache[path], gallery);
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 function scanDirectory(directoryPath) {

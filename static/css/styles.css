@@ -343,11 +343,10 @@ select:focus {
     margin-bottom: 0;
 }
 
-.pagination-controls, .sort-controls {
+.pagination-controls, .sort-controls, .filter-controls {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-right: 1rem;
 }
 
 .pagination-controls select, .sort-controls select {
@@ -822,6 +821,47 @@ select option {
     max-width: 100%;
     object-fit: contain;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Toggle button styles */
+.toggle-button {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    background-color: #333;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    outline: none;
+}
+
+.toggle-button:hover {
+    background-color: #444;
+}
+
+.toggle-button.active {
+    background-color: #3498db;
+}
+
+.toggle-slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 50%;
+    transition: transform 0.3s;
+}
+
+.toggle-button.active .toggle-slider {
+    transform: translateX(26px);
+}
+
+.filter-controls {
+    margin-left: 1rem;
 }
 
 .nav-button {
