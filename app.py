@@ -103,7 +103,12 @@ def ensure_trash_folder():
         return None
 
 def ensure_favorites_folder():
-    """Ensure the favorites folder exists and has proper permissions"""
+    """Ensure the favorites folder exists and has proper permissions
+    
+    Note: This function is maintained for backward compatibility.
+    The app now uses favorites.json to track favorites instead of the filesystem,
+    but we still maintain the favorites folder for legacy purposes.
+    """
     settings = get_settings()
     favorites_folder = settings['favorites_folder']
     
@@ -593,41 +598,176 @@ def save_rotated_image():
         logger.error(f"Error saving rotated image: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Path to favorites.json file
+FAVORITES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'favorites.json')
+
+def migrate_favorites_to_json():
+    """Migrate favorites from filesystem to JSON file for backward compatibility"""
+    # Only run migration if favorites.json doesn't exist or is empty
+    current_favorites = []
+    if os.path.exists(FAVORITES_FILE):
+        try:
+            with open(FAVORITES_FILE, 'r') as f:
+                data = json.load(f)
+                current_favorites = data.get('favorited_images', [])
+        except Exception as e:
+            logger.error(f"Error reading favorites file during migration: {e}")
+    
+    # If we already have favorites in the JSON, skip migration
+    if current_favorites:
+        logger.info(f"Skipping favorites migration - {len(current_favorites)} favorites already in JSON")
+        return
+    
+    # Get the favorites folder
+    favorites_folder = ensure_favorites_folder()
+    if not favorites_folder or not os.path.exists(favorites_folder):
+        logger.info("No favorites folder found for migration")
+        return
+    
+    # Find all image files in the favorites folder
+    migrated_favorites = []
+    try:
+        for root, _, files in os.walk(favorites_folder):
+            for file in files:
+                # Skip hidden files and non-image files
+                if file.startswith('.') or not is_image(os.path.join(root, file)):
+                    continue
+                
+                # Try to find the original path by removing timestamp prefix
+                # This is an approximation since we can't know the exact original path
+                original_filename = file
+                if '_' in file:
+                    # Remove timestamp prefix if it exists (e.g., "1619123456_original.jpg" → "original.jpg")
+                    parts = file.split('_', 1)
+                    if len(parts) > 1 and parts[0].isdigit():
+                        original_filename = parts[1]
+                
+                # Look for this file in monitored directories
+                monitored_dirs = get_monitored_directories()
+                for directory in monitored_dirs:
+                    for dir_root, _, dir_files in os.walk(directory):
+                        for dir_file in dir_files:
+                            if dir_file == original_filename and is_image(os.path.join(dir_root, dir_file)):
+                                original_path = os.path.join(dir_root, dir_file)
+                                migrated_favorites.append(original_path)
+                                logger.info(f"Migrated favorite: {original_path}")
+                                break
+        
+        # Save the migrated favorites
+        if migrated_favorites:
+            save_favorites(migrated_favorites)
+            logger.info(f"Successfully migrated {len(migrated_favorites)} favorites to JSON")
+    except Exception as e:
+        logger.error(f"Error during favorites migration: {e}")
+
+def get_favorites():
+    """Get the list of favorited images from favorites.json"""
+    if os.path.exists(FAVORITES_FILE):
+        try:
+            with open(FAVORITES_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get('favorited_images', [])
+        except Exception as e:
+            logger.error(f"Error reading favorites file: {e}")
+            return []
+    else:
+        # Create default favorites file if it doesn't exist
+        save_favorites([])
+        return []
+
+def save_favorites(favorited_images):
+    """Save the list of favorited images to favorites.json"""
+    try:
+        with open(FAVORITES_FILE, 'w') as f:
+            json.dump({'favorited_images': favorited_images}, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving favorites: {e}")
+        return False
+
 def is_image_favorited(image_path):
-    """Check if an image is already in the favorites folder"""
+    """Check if an image is already favorited
+    
+    This function checks both the favorites.json file and the favorites folder.
+    Returns the path to the favorited file if found, otherwise False.
+    """
     if not image_path:
         return False
     
+    # First check the JSON list
+    favorited_images = get_favorites()
+    is_in_json = image_path in favorited_images
+    
+    # If it's in the JSON list, we consider it favorited
+    if is_in_json:
+        return image_path
+    
+    # As a fallback, also check the filesystem
+    # This helps with backward compatibility
     favorites_folder = ensure_favorites_folder()
     if not favorites_folder:
         return False
     
-    # Get the base filename without the timestamp prefix
+    # Get the base filename
     filename = os.path.basename(image_path)
     
     # Check if any file in the favorites folder ends with this filename
-    # This handles the timestamp prefix in the favorited filenames
     for favorite_file in os.listdir(favorites_folder):
         if favorite_file.endswith(filename):
+            # If found in filesystem but not in JSON, add it to JSON for consistency
+            if not is_in_json:
+                favorited_images.append(image_path)
+                save_favorites(favorited_images)
+                logger.info(f"Added missing favorite to JSON: {image_path}")
             return os.path.join(favorites_folder, favorite_file)
     
     return False
 
 @app.route('/favorite-image', methods=['POST'])
 def favorite_image():
-    """Toggle an image's favorite status - add to or remove from favorites"""
+    """Toggle an image's favorite status - add to or remove from favorites
+    
+    This function maintains both the JSON-based favorites tracking and the file-based approach.
+    When an image is favorited, it is added to favorites.json and copied to the favorites folder.
+    When unfavorited, it is removed from favorites.json and deleted from the favorites folder.
+    """
     try:
         image_path = request.json.get('path')
         if not image_path or not os.path.exists(image_path):
             return jsonify({'success': False, 'error': 'Image not found'}), 404
         
-        # Check if image is already favorited
-        favorited_path = is_image_favorited(image_path)
+        # Get current favorites list from JSON
+        favorited_images = get_favorites()
         
-        # If already favorited, remove it
-        if favorited_path:
+        # Check if image is already favorited in JSON
+        is_favorited = image_path in favorited_images
+        
+        # Also check if it exists in the favorites folder
+        favorites_folder = ensure_favorites_folder()
+        if not favorites_folder:
+            return jsonify({'success': False, 'error': 'Failed to access favorites folder'}), 500
+        
+        # Get the base filename without the timestamp prefix
+        filename = os.path.basename(image_path)
+        favorited_file_path = None
+        
+        # Check if any file in the favorites folder ends with this filename
+        for favorite_file in os.listdir(favorites_folder):
+            if favorite_file.endswith(filename):
+                favorited_file_path = os.path.join(favorites_folder, favorite_file)
+                break
+        
+        # If already favorited, remove it from both JSON and filesystem
+        if is_favorited:
             try:
-                os.remove(favorited_path)
+                # Remove from JSON
+                favorited_images.remove(image_path)
+                save_favorites(favorited_images)
+                
+                # Remove from filesystem if it exists
+                if favorited_file_path and os.path.exists(favorited_file_path):
+                    os.remove(favorited_file_path)
+                    
                 return jsonify({
                     'success': True,
                     'message': 'Image removed from favorites',
@@ -638,60 +778,68 @@ def favorite_image():
                 logger.error(f"Error removing favorite: {e}")
                 return jsonify({'success': False, 'error': f"Error removing from favorites: {e}"}), 500
         
-        # If not favorited, add it to favorites
-        # Get the favorites folder path
-        favorites_folder = ensure_favorites_folder()
-        if not favorites_folder:
-            return jsonify({'success': False, 'error': 'Failed to create favorites folder'}), 500
-        
-        # Create a destination path in the favorites folder
-        filename = os.path.basename(image_path)
-        # Add timestamp to avoid name conflicts
-        timestamp = int(time.time())
-        favorite_filename = f"{timestamp}_{filename}"
-        favorite_path = os.path.join(favorites_folder, favorite_filename)
-        
-        # Copy the file to favorites with robust error handling
-        import shutil
+        # If not favorited, add it to both JSON and filesystem
         try:
-            # Try the standard copy first
-            shutil.copy2(image_path, favorite_path)
-        except PermissionError as pe:
-            logger.warning(f"Permission error during copy, trying alternative method: {pe}")
+            # Add to JSON
+            if image_path not in favorited_images:
+                favorited_images.append(image_path)
+                save_favorites(favorited_images)
+            
+            # Create a destination path in the favorites folder
+            filename = os.path.basename(image_path)
+            # Add timestamp to avoid name conflicts
+            timestamp = int(time.time())
+            favorite_filename = f"{timestamp}_{filename}"
+            favorite_path = os.path.join(favorites_folder, favorite_filename)
+            
+            # Copy the file to favorites with robust error handling
+            import shutil
             try:
-                # Try reading the source file and writing to destination
-                with open(image_path, 'rb') as src_file:
-                    content = src_file.read()
-                    with open(favorite_path, 'wb') as dest_file:
-                        dest_file.write(content)
-                # Try to copy metadata if possible
+                # Try the standard copy first
+                shutil.copy2(image_path, favorite_path)
+            except PermissionError as pe:
+                logger.warning(f"Permission error during copy, trying alternative method: {pe}")
                 try:
-                    os.chmod(favorite_path, os.stat(image_path).st_mode)
-                except Exception as chmod_err:
-                    logger.warning(f"Could not copy file permissions: {chmod_err}")
-            except Exception as alt_err:
-                logger.error(f"Alternative copy method failed: {alt_err}")
-                raise Exception(f"Error adding image to favorites: {alt_err}")
-        
-        return jsonify({
-            'success': True, 
-            'message': 'Image added to favorites',
-            'original_path': image_path,
-            'favorite_path': favorite_path,
-            'was_favorited': False
-        })
+                    # Try reading the source file and writing to destination
+                    with open(image_path, 'rb') as src_file:
+                        content = src_file.read()
+                        with open(favorite_path, 'wb') as dest_file:
+                            dest_file.write(content)
+                    # Try to copy metadata if possible
+                    try:
+                        os.chmod(favorite_path, os.stat(image_path).st_mode)
+                    except Exception as chmod_err:
+                        logger.warning(f"Could not copy file permissions: {chmod_err}")
+                except Exception as alt_err:
+                    logger.error(f"Alternative copy method failed: {alt_err}")
+                    raise Exception(f"Error adding image to favorites: {alt_err}")
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Image added to favorites',
+                'original_path': image_path,
+                'favorite_path': favorite_path,
+                'was_favorited': False
+            })
+        except Exception as e:
+            logger.error(f"Error adding to favorites: {e}")
+            return jsonify({'success': False, 'error': f"Error adding to favorites: {e}"}), 500
     except Exception as e:
         logger.error(f"Error processing favorite action: {e}")
         return jsonify({'success': False, 'error': f"Error processing favorite action: {e}"}), 500
 
 @app.route('/check-favorited', methods=['POST'])
 def check_favorited():
-    """Check if an image is already in favorites"""
+    """Check if an image is already in favorites
+    
+    This function checks both the favorites.json file and the favorites folder.
+    """
     try:
         image_path = request.json.get('path')
         if not image_path:
             return jsonify({'success': False, 'error': 'No image path provided'}), 400
         
+        # Use the is_image_favorited function which checks both JSON and filesystem
         favorited_path = is_image_favorited(image_path)
         
         return jsonify({
@@ -746,6 +894,20 @@ def scan_directory_task(task_id, directory):
         task['status'] = 'error'
         task['error'] = str(e)
         task['end_time'] = time.time()
+
+# Initialize the app by ensuring required folders and migrating favorites
+def initialize_app():
+    # Ensure required folders exist
+    ensure_trash_folder()
+    ensure_favorites_folder()
+    
+    # Migrate favorites from filesystem to JSON if needed
+    migrate_favorites_to_json()
+    
+    logger.info("App initialization complete")
+
+# Call initialize on import
+initialize_app()
 
 if __name__ == '__main__':
     import argparse
